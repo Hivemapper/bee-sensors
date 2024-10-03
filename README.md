@@ -4,13 +4,29 @@ Utilities for sensor (GNSS, IMU, etc.) processing and fusion on the Bee.
 
 ### Table of Contents
 - [GNSS](#gnss)
+    - [Parse U-blox Messages](#parse-u-blox-messages)
+    - [Flash U-blox Configuration](#flash-u-blox-configuration)
     - [Save U-blox Configuration to File](#save-u-blox-configuration-to-file)
     - [Compare Two U-blox Configurations](#compare-two-u-blox-configurations)
-    - [Flash U-blox Configuration](#flash-u-blox-configuration)
-    - [Parse U-blox Messages](#parse-u-blox-messages)
 
 ## GNSS
 
+
+### Parse U-blox Messages
+
+Use the `ubx_parser.py` file to convert all messages from `.ubx` to `.csv` files. Will correlate the GPS time to each navigation epoch and discard any epoch without a valid GPS time message. It takes a single parameter:
+- `-i`, `--input` is the path to the UBX file to parse
+
+Example use:
+```
+python3 ubx_parser.py -i UBX_MESSAGES.ubx
+```
+
+### Flash U-blox Configuration
+
+Use the `ubx_flash_cfg.sh` file to flash updated configuration parameters to the dashcam with `gpsd`.
+
+Before running, update the `ubxtoolCmd`, `address`, and `port` variables that correspond to the location of the installed `ubxtool` executable and dashcam address/port
 
 ### Save U-blox Configuration to File
 
@@ -48,20 +64,3 @@ Example use:
 ```
 python3 compare_ubx_cfg.py --cfg1 ubx_cfg_passive.csv --cfg2 ubx_cfg_active.csv
 ```
-
-### Flash U-blox Configuration
-
-Use the `ubx_flash_cfg.sh` file to flash updated configuration parameters to the dashcam with `gpsd`.
-
-Before running, update the `ubxtoolCmd`, `address`, and `port` variables that correspond to the location of the installed `ubxtool` executable and dashcam address/port
-
-### Parse U-blox Messages
-
-Use the `ubx_parser.py` file to convert all messages from `.ubx` to `.csv` files. Will correlate the GPS time to each navigation epoch and discard any epoch without a valid GPS time message. It takes a single parameter:
-- `-i`, `--input` is the path to the UBX file to parse
-
-Example use:
-```
-python3 ubx_parser.py -i UBX_MESSAGES.ubx
-```
-
