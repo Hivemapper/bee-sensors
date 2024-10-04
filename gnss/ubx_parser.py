@@ -26,7 +26,14 @@ class UbxParser():
         self.input_path = input_path      # path to UBX input file
         self.ubx_csv_files = dict()       # dictionary of csv file paths for each message type
 
-        with open(input_path, 'rb') as stream:
+        self.conversions = self._ubx_name_conversions()
+
+        self.save_ubx_msgs_to_csv()
+    
+
+    def save_ubx_msgs_to_csv(self):
+
+        with open(self.input_path, 'rb') as stream:
             ubr = UBXReader(stream, protfilter=UBX_PROTOCOL)
             
             epoch_gps_millis = None # timestamp of epoch
@@ -61,17 +68,25 @@ class UbxParser():
                         continue
                     if "_" not in name:
                         # save metadata
-                        msg_metadata[name] = value
+                        if name in self.conversions and self.conversions[name][1] is not None:
+                            value = self.conversions[name][1][value]
+                        msg_metadata[self.conversions.get(name,[name])[0]] = value
                     else:
+                        temp_name = name.split("_")[0]
+                        temp_name = self.conversions.get(temp_name,[temp_name])[0]
+
                         # save per-sv data
                         idx = int(name.split("_")[1])
                         if idx not in msg_per_sv_data:
                             msg_per_sv_data[idx] = dict()
-                        msg_per_sv_data[idx][name.split("_")[0]] = value
+                        
+                        if name.split("_")[0] in self.conversions and self.conversions[name.split("_")[0]][1] is not None:
+                            value = self.conversions[name.split("_")[0]][1][value]
+                        msg_per_sv_data[idx][temp_name] = value
 
-                        if name.split("_")[0] not in msg_per_sv_labels:
-                            # add to unique labels if not already there
-                            msg_per_sv_labels.append(name.split("_")[0])
+                        # add to unique labels if not already there
+                        if temp_name not in msg_per_sv_labels:
+                            msg_per_sv_labels.append(temp_name)
 
                 # merge metadata and per-sv data
                 csv_data = []
@@ -119,7 +134,6 @@ class UbxParser():
                 # write labels to csv
                 if identity not in self.ubx_csv_files:
                     self.ubx_csv_files[identity] = os.path.join(dir_name, identity.replace("-","_") + ".csv")
-                    print("Writing",self.ubx_csv_files[identity])
                     with open(self.ubx_csv_files[identity], 'w') as f:
                         writer = csv.writer(f)
                         writer.writerow(["gps_millis","utc_timestamp"] + labels)
@@ -156,7 +170,43 @@ class UbxParser():
             gps_tow = parsed_data.iTOW * 1E-3 + parsed_data.fTOW * 1E-9
             gps_millis = glp.tow_to_gps_millis(gps_week, gps_tow)
 
-        return gps_millis            
+        return gps_millis
+    
+    def _ubx_name_conversions(self):
+        """Conver between UBX names and glp/readable names.
+
+        Returns
+        -------
+        conversions : dict
+            Dictionary of UBX names to glp/readable names.
+        
+        """
+
+        conversions = dict()
+
+        gnss_id_conversions = {
+            0: "gps",
+            1: "sbas",
+            2: "galileo",
+            3: "beidou",
+            4: "imes",
+            5: "qzss",
+            6: "glonass",
+            7: "irnss",            
+        }
+        conversions["gnssId"] = ("gnss_id", gnss_id_conversions)
+        conversions["svId"] = ("sv_id", None)
+        conversions["cno"] = ("cn0_dbhz", None)
+        conversions["elev"] = ("el_sv_deg", None)
+        conversions["azim"] = ("az_sv_deg", None)
+        conversions["prRes"] = ("residuals_m", None)
+        conversions["lon"] = ("lon_rx_deg", None)
+        conversions["lat"] = ("lat_rx_deg", None)
+        conversions["height"] = ("alt_rx_m", None)
+
+        return conversions
+
+
 
 def setup_parser():
   """Parse command line arguments.
