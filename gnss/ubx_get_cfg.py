@@ -11,18 +11,22 @@ import argparse
 import subprocess
 
 CFG_GROUPS = [
+             "CFG-ANA",
              # "CFG-BDS",       # not on our ublox chip
              "CFG-HW",
              "CFG-I2C",
              "CFG-I2CINPROT",
              "CFG-I2COUTPROT",
              "CFG-INFMSG",
+             "CFG-ITFM",
              "CFG-MOT",
              "CFG-MSGOUT",
              # "CFG-NAV2",        # not on our ublox chip
              # "CFG-NAVMASK",     # not on our ublox chip
              "CFG-NAVSPG",
              "CFG-NMEA",
+             "CFG-ODO",
+             "CFG-QZSS",
              "CFG-RATE",
              "CFG-RINV",
              "CFG-SBAS",
@@ -37,6 +41,7 @@ CFG_GROUPS = [
              "CFG-UART1",
              "CFG-UART1INPROT",
              "CFG-UART1OUTPROT",
+             "CFG-QZSS",
              ]
 
 # conversions from our ublox default names to names that match the
