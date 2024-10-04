@@ -136,11 +136,10 @@ class UbxParser():
                     self.ubx_csv_files[identity] = os.path.join(dir_name, identity.replace("-","_") + ".csv")
                     with open(self.ubx_csv_files[identity], 'w') as f:
                         writer = csv.writer(f)
-                        writer.writerow(["gps_millis","utc_timestamp"] + labels)
+                        writer.writerow(["gps_millis"] + labels)
 
             # add gps_millis to each row of data
-            csv_data = [[epoch_gps_millis,
-                            glp.gps_millis_to_datetime(epoch_gps_millis)] \
+            csv_data = [[epoch_gps_millis] \
                         + row for row in csv_data]
 
             # write data to csv files
