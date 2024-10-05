@@ -103,10 +103,10 @@ class UbxParser():
                         csv_data.append(row)
 
                 # add message data to epoch data
-                if parsed_data.identity not in epoch_csv_data:
-                    epoch_csv_data[parsed_data.identity] = (labels, csv_data)
-                else:
+                if parsed_data.identity in epoch_csv_data and parsed_data.identity.split("-")[0] == "NAV":
                     print("Warning: duplicate",parsed_data.identity,"identity found in epoch")
+                else:
+                    epoch_csv_data[parsed_data.identity] = (labels, csv_data)
 
     def write_data_to_csv(self, epoch_csv_data, epoch_gps_millis):
         """Write epoch data to csv files.
@@ -136,11 +136,16 @@ class UbxParser():
                     self.ubx_csv_files[identity] = os.path.join(dir_name, identity.replace("-","_") + ".csv")
                     with open(self.ubx_csv_files[identity], 'w') as f:
                         writer = csv.writer(f)
-                        writer.writerow(["gps_millis"] + labels)
+                        if identity.split("-")[0] == "RXM":
+                            # don't use gps_millis (of NAV solution) for RXM messages
+                            writer.writerow(labels)
+                        else:
+                            writer.writerow(["gps_millis"] + labels)
 
-            # add gps_millis to each row of data
-            csv_data = [[epoch_gps_millis] \
-                        + row for row in csv_data]
+            if identity.split("-")[0] != "RXM":
+                # add gps_millis to each row of data
+                csv_data = [[epoch_gps_millis] \
+                            + row for row in csv_data]
 
             # write data to csv files
             with open(self.ubx_csv_files[identity], 'a') as f:
