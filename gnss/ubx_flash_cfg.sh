@@ -76,6 +76,26 @@ sleep 1
 $ubxtoolCmd --command 06,8A,00,07,00,00,1B,00,91,20,01 $address:$port | grep ACK;
 sleep 1
 
+#CFG-TP-TIMEGRID_TP1: steer to GPS time rather than UTC time
+$ubxtoolCmd -z CFG-TP-TIMEGRID_TP1,1 $address:$port | grep ACK;
+sleep 1
+
+#CFG-TP-PERIOD_TP1: Time pulse period in microseconds
+$ubxtoolCmd -z CFG-TP-PERIOD_TP1,25000 $address:$port | grep ACK;
+sleep 1
+
+#CFG-TP-PERIOD_LOCK_TP1: Time pulse period in microseconds
+$ubxtoolCmd -z CFG-TP-PERIOD_LOCK_TP1,25000 $address:$port | grep ACK;
+sleep 1
+
+#CFG-TP-LEN_TP1: Length of pulse in microseconds when no GNSS lock
+$ubxtoolCmd -z CFG-TP-LEN_TP1,2500 $address:$port | grep ACK;
+sleep 1
+
+#CFG-TP-LEN_LOCK_TP1: Length of pulse in microseconds when no GNSS lock
+$ubxtoolCmd -z CFG-TP-LEN_LOCK_TP1,2500 $address:$port | grep ACK;
+sleep 1
+
 
 # EXISTING MESSAGES
 
