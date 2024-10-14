@@ -18,8 +18,52 @@
 import cv2
 import numpy as np
 import depthai as dai
-import argparse
 
+import argparse
+import threading
+
+class boxManager:
+
+  def __init__(self):
+    self.coords = [None, None]
+    self.lock   = threading.Lock()
+  
+  def setCoords(self, index, coords):
+    self.lock.acquire()
+    self.coords[index] = coords
+    self.lock.release()
+  
+  def getCoords(self):
+    retVal = None
+    self.lock.acquire()
+    retVal = self.coords
+    self.lock.release()
+    return retVal
+
+  def reorderCoords(self):
+    self.lock.acquire()
+    oldPoints = [self.coords[0], self.coords[1]]
+    self.lock.release()
+    
+    newPoints = [[0, 0], [0, 0]]
+    
+    if oldPoints[0][0] <= oldPoints[1][0]:
+      newPoints[0][0] = oldPoints[0][0]
+      newPoints[1][0] = oldPoints[1][0]
+    else:
+      newPoints[0][0] = oldPoints[1][0]
+      newPoints[1][0] = oldPoints[0][0]
+    if oldPoints[0][1] <= oldPoints[1][1]:
+      newPoints[0][1] = oldPoints[0][1]
+      newPoints[1][1] = oldPoints[1][1]
+    else:
+      newPoints[0][1] = oldPoints[1][1]
+      newPoints[1][1] = oldPoints[0][1]
+    
+    self.lock.acquire()
+    self.coords = newPoints
+    self.lock.release()
+    
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "-res",
@@ -209,15 +253,40 @@ def getDisparityFrame(frame, cvColorMap):
     return disp
 
 baseframe = None
+clickCoords = boxManager()
 
+def calculate_avg_depth(frame, points):
+  print("Bounds: {} to {}".format(points[0], points[1]))
+  totalPoints = 0
+  totalDistance = 0
+  for ii in range(points[0][0], points[1][0]):
+    for jj in range(points[0][1], points[1][1]):
+      if frame[jj][ii] != 0 and frame[jj][ii] != 65535:
+        totalDistance += frame[jj][ii]
+        totalPoints += 1
+  if totalPoints > 0:
+    reportDist = totalDistance / (1000.0 * totalPoints)
+    print("Dist: {}m, averaged over {} points".format(reportDist, totalPoints))
+  else:
+    print("Not enough good data to assess distance")
+      
 def click_inspect_depth(event, x, y, flags, param):
     # grab references to the global variables
     global baseframe
+    global clickCoords
+    
     if event == cv2.EVENT_LBUTTONDOWN:
-      dist = baseframe[y][x] / 1000.0
-      print("X, Y: {}, {}".format(x, y))
-      print("Dist: {}m".format(dist))
-
+      clickCoords.setCoords(0, [x, y])
+      clickCoords.setCoords(1, None)
+    elif event == cv2.EVENT_LBUTTONUP:
+      clickCoords.setCoords(1, [x, y])
+      clickCoords.reorderCoords()
+      coords = clickCoords.getCoords()
+      calculate_avg_depth(baseframe, coords)
+      #dist = baseframe[y][x] / 1000.0
+      #print("X, Y: {}, {}".format(x, y))
+      #print("Dist: {}m".format(dist))
+    
 device = dai.Device()
 calibData = device.readCalibration()
 print("Creating Stereo Depth pipeline")
@@ -236,13 +305,9 @@ xoutRectifLeft = pipeline.create(dai.node.XLinkOut)
 xoutRectifRight = pipeline.create(dai.node.XLinkOut)
 
 if args.swap_left_right:
-    #camLeft.setCamera("right")
-    #camRight.setCamera("left")
     camLeft.setBoardSocket(dai.CameraBoardSocket.RIGHT)
     camRight.setBoardSocket(dai.CameraBoardSocket.LEFT)
 else:
-    #camLeft.setCamera("left")
-    #camRight.setCamera("right")
     camLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)
     camRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
 
@@ -306,6 +371,9 @@ with device:
             if name == "depth":
                 baseframe = frame.astype(np.uint16)
                 frame = (baseframe // 100).clip(0, 255).astype(np.uint8)     #### add this last line
+                rectCoords = clickCoords.getCoords()
+                if rectCoords[1] is not None:
+                  cv2.rectangle(frame, rectCoords[0], rectCoords[1], (255, 0, 0), 2)
             elif name == "disparity":
                 frame = getDisparityFrame(frame, cvColorMap)
 
