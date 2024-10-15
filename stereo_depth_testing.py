@@ -252,24 +252,38 @@ def getDisparityFrame(frame, cvColorMap):
 
     return disp
 
+def colorDistanceFrame(frame, cvColorMap):
+    dist = (frame / 256).astype(np.uint8)
+    dist = cv2.applyColorMap(dist, cvColorMap)
+    return dist
+
 baseframe = None
 clickCoords = boxManager()
 
-def calculate_avg_depth(frame, points):
+def calculate_depth_stats(frame, points):
   print("Bounds: {} to {}".format(points[0], points[1]))
-  totalPoints = 0
+  pointsArray = []
   totalDistance = 0
   for ii in range(points[0][0], points[1][0]):
     for jj in range(points[0][1], points[1][1]):
       if frame[jj][ii] != 0 and frame[jj][ii] != 65535:
+        pointsArray.append(frame[jj][ii])
         totalDistance += frame[jj][ii]
-        totalPoints += 1
+  pointsArray.sort()
+  nthtiles = [0.10, 0.25, 0.50, 0.75, 0.90]
+  values = []
+  totalPoints = len(pointsArray)
   if totalPoints > 0:
+    for nthtile in nthtiles:
+      distance = pointsArray[int(totalPoints * nthtile)] / 1000.0
+      values.append(distance)
     reportDist = totalDistance / (1000.0 * totalPoints)
-    print("Dist: {}m, averaged over {} points".format(reportDist, totalPoints))
+    print("Average Distance: {}m, over {} points".format(reportDist, totalPoints))
+    print("Distance in m @ 10th%, 25th, 50th, 75th, 90th:") 
+    print("{}, {}, {}, {}, {}".format(values[0], values[1], values[2], values[3], values[4]))
   else:
     print("Not enough good data to assess distance")
-      
+
 def click_inspect_depth(event, x, y, flags, param):
     # grab references to the global variables
     global baseframe
@@ -282,10 +296,7 @@ def click_inspect_depth(event, x, y, flags, param):
       clickCoords.setCoords(1, [x, y])
       clickCoords.reorderCoords()
       coords = clickCoords.getCoords()
-      calculate_avg_depth(baseframe, coords)
-      #dist = baseframe[y][x] / 1000.0
-      #print("X, Y: {}, {}".format(x, y))
-      #print("Dist: {}m".format(dist))
+      calculate_depth_stats(baseframe, coords)
     
 device = dai.Device()
 calibData = device.readCalibration()
@@ -353,7 +364,7 @@ if outRectified:
 if depth:
     streams.append("depth")
 
-cvColorMap = cv2.applyColorMap(np.arange(256, dtype=np.uint8), cv2.COLORMAP_JET)
+cvColorMap = cv2.applyColorMap(np.arange(256, dtype=np.uint8), cv2.COLORMAP_INFERNO)
 cvColorMap[0] = [0, 0, 0]
 print("Creating DepthAI device")
 cv2.namedWindow("depth")
@@ -370,7 +381,8 @@ with device:
             frame = q.get().getCvFrame()
             if name == "depth":
                 baseframe = frame.astype(np.uint16)
-                frame = (baseframe // 100).clip(0, 255).astype(np.uint8)     #### add this last line
+                frame = colorDistanceFrame(frame, cvColorMap)
+                #frame = (baseframe // 100).clip(0, 255).astype(np.uint8)     #### add this last line
                 rectCoords = clickCoords.getCoords()
                 if rectCoords[1] is not None:
                   cv2.rectangle(frame, rectCoords[0], rectCoords[1], (255, 0, 0), 2)
