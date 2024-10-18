@@ -12,6 +12,7 @@
 # Changelog:
 # Author Email, Date, Comment
 # niessl@hellbender.com, 2024-10-03, VC'ed current version
+# alexei@hivemapper.com, 2024-10-16, Added in outlier and preferred surface estimation
 #
 
 
@@ -260,29 +261,80 @@ def colorDistanceFrame(frame, cvColorMap):
 baseframe = None
 clickCoords = boxManager()
 
+def filter_outliers(data, threshold=2):
+    data = data.astype(float)
+    median = np.nanmedian(data)
+    deviation = np.abs(data - median)
+    mad = np.nanmedian(deviation)
+    mask = np.logical_and(np.isfinite(deviation), deviation < (threshold * mad))
+    filtered_data = np.copy(data)
+    filtered_data[~mask] = np.nan
+    return filtered_data
+
+def fill_missing_values(data):
+    nans, x = np.isnan(data), lambda z: z.nonzero()[0]
+    if nans.all():
+        return data
+    data[nans] = np.interp(x(nans), x(~nans), data[~nans])
+    return data
+
+def fit_plane(X, Y, Z):
+    mask = ~np.isnan(Z)
+    A = np.c_[X[mask], Y[mask], np.ones(X[mask].size)]
+    C, _, _, _ = np.linalg.lstsq(A, Z[mask], rcond=None)
+    return C
+
 def calculate_depth_stats(frame, points):
-  print("Bounds: {} to {}".format(points[0], points[1]))
-  pointsArray = []
-  totalDistance = 0
-  for ii in range(points[0][0], points[1][0]):
-    for jj in range(points[0][1], points[1][1]):
-      if frame[jj][ii] != 0 and frame[jj][ii] != 65535:
-        pointsArray.append(frame[jj][ii])
-        totalDistance += frame[jj][ii]
-  pointsArray.sort()
-  nthtiles = [0.10, 0.25, 0.50, 0.75, 0.90]
-  values = []
-  totalPoints = len(pointsArray)
-  if totalPoints > 0:
-    for nthtile in nthtiles:
-      distance = pointsArray[int(totalPoints * nthtile)] / 1000.0
-      values.append(distance)
-    reportDist = totalDistance / (1000.0 * totalPoints)
-    print("Average Distance: {}m, over {} points".format(reportDist, totalPoints))
-    print("Distance in m @ 10th%, 25th, 50th, 75th, 90th:") 
-    print("{}, {}, {}, {}, {}".format(values[0], values[1], values[2], values[3], values[4]))
-  else:
-    print("Not enough good data to assess distance")
+    print(f"Bounds: {points[0]} to {points[1]}")
+    x1, y1 = points[0]
+    x2, y2 = points[1]
+    
+    # Extract the depth box using slicing
+    depth_box = frame[y1:y2, x1:x2]
+    
+    # Create a mask for valid depth values
+    valid_mask = (depth_box > 0) & (depth_box < 65535)
+    pointsArray = depth_box[valid_mask]
+    totalPoints = len(pointsArray)
+    
+    if totalPoints > 0:
+        # Calculate percentiles using numpy
+        percentiles = [10, 25, 50, 75, 90]
+        values = np.percentile(pointsArray, percentiles) / 1000.0  # Convert to meters
+        
+        # Calculate average distance
+        totalDistance = pointsArray.sum()
+        reportDist = totalDistance / (1000.0 * totalPoints)
+        
+        print(f"Average Distance: {reportDist}m, over {totalPoints} points")
+        print("Distance in m @ 10th%, 25th, 50th, 75th, 90th:")
+        print(", ".join([f"{v:.3f}" for v in values]))
+        
+        # Apply outlier removal and fill missing values
+        filtered_depth_data_2d = filter_outliers(depth_box, threshold=3)
+        filled_filtered_data_2d = fill_missing_values(filtered_depth_data_2d)
+        
+        # Check if there are valid points after filtering
+        if np.isnan(filled_filtered_data_2d).all():
+            print("All data is NaN after filtering and filling.")
+            return
+        
+        # Fit plane
+        X, Y = np.meshgrid(np.arange(filled_filtered_data_2d.shape[1]), np.arange(filled_filtered_data_2d.shape[0]))
+        try:
+            C = fit_plane(X, Y, filled_filtered_data_2d)
+        except ValueError as e:
+            print(e)
+            return
+        
+        # Calculate distance to plane at the center
+        center_x = (x2 - x1) / 2
+        center_y = (y2 - y1) / 2
+        distance = (C[0] * center_x + C[1] * center_y + C[2]) / 1000.0  # Convert to meters
+        print(f"Distance to plane: {distance:.3f}m")
+    else:
+        print("Not enough good data to assess distance")
+
 
 def click_inspect_depth(event, x, y, flags, param):
     # grab references to the global variables
@@ -333,6 +385,13 @@ stereo.setLeftRightCheck(lrcheck)
 stereo.setExtendedDisparity(extended)
 stereo.setSubpixel(subpixel)
 stereo.setFrameSync(False)
+
+#Matic's recommended updates
+stereo.enableDistortionCorrection(True)
+stereo.setRectificationUseSpecTranslation(False)
+stereo.setDepthAlignmentUseSpecTranslation(False)
+stereo.setDisparityToDepthUseSpecTranslation(False)
+
 if args.alpha is not None:
     stereo.setAlphaScaling(args.alpha)
     config = stereo.initialConfig.get()
