@@ -41,7 +41,7 @@ Use the `ubx_get_cfg.py` file to save all possible configuration parameters on t
     ```
     On the newer Bee devices (do not need to specify baudrate):
     ```
-    gpsd -G -S 9090 --speed 460800 -D 4 -n -N /dev/ttyS2
+    gpsd -G -S 9090 -D 4 -n -N /dev/ttyS2
     ```
 #### Running
 The user must three parameters when running from the command line:
