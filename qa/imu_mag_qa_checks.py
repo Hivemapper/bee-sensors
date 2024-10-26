@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 def main():
 
     # database path
-    DB_PATH = "/<PATH TO DATABASE FILE>/data-logger.v1.4.5.db"
+    DB_PATH = "/<PATH TO DATABASE FILE>/data-logger.<VERSION>.db"
 
     logs = parse_database(DB_PATH)
 
