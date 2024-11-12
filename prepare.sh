@@ -13,9 +13,9 @@ echo "Stopped redis-handler"
 
 rm -rv /data/cache/*
 echo "Cleared cache"    
-rm /data/landmarks/*
+rm -rv /data/landmarks/
 echo "Cleared landmarks"
-rm -rv /data/optical_flow/*
+rm -rv /data/optical_flow/
 echo "Cleared optical flow assets"
 
 # remove old envirnmental variables
