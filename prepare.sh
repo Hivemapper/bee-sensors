@@ -18,13 +18,6 @@ echo "Cleared landmarks"
 rm -rv /data/optical_flow/
 echo "Cleared optical flow assets"
 
-# remove old envirnmental variables
-rm -rv /etc/systemd/system/redis-handler.service.d
-rm -rv /etc/systemd/system/map-ai.service.d
-rm -v /etc/profile.d/set_dbug_mode.sh
-rm -v /etc/profile.d/set_debug_mode.sh
-rm -v /etc/profile.d/set_redis_db_path.sh
-
 sleep 1
 mount -o remount,rw /
 echo "Remounted rootfs as read-write"
