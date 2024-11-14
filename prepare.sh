@@ -38,9 +38,7 @@ rm -v /data/recording/data-logger*
 echo "Cleared data-logger DB"
 rm -rv /data/redis_handler/
 echo "Cleared redis DB"
-rm -v /data/map-ai.log
-echo "Cleaned up map-ai log"
-rm -v /data/recording/odc-api.log
-echo "Cleaned up odc-api log"
+rm -v /data/recording/*.log
+echo "Cleaned up old logs"
 
 echo "Ready."
