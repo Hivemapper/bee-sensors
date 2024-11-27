@@ -40,5 +40,9 @@ rm -rv /data/redis_handler/
 echo "Cleared redis DB"
 rm -v /data/recording/*.log*
 echo "Cleaned up old logs"
+rm -v /data/recording/lte-persist/*
+echo "Cleaned up lte-persist"
+rm -v /data/recording/lte-cookie-persist/*
+echo "Cleaned up lte-cookie-persist"
 
 echo "Ready."
