@@ -51,7 +51,7 @@ The user must three parameters when running from the command line:
 
 Example use:
 ```
-python3 get_ubx_cfg.py --dashcam 192.168.0.10:9090 --ublox /home/derek/gnss/gpsd-3.25/gpsd-3.25/clients/ubxtool --name active
+python3 ubx_get_cfg.py --dashcam 192.168.0.10:9090 --ublox /home/derek/gnss/gpsd-3.25/gpsd-3.25/clients/ubxtool --name active
 ```
 
 ### Compare Two U-blox Configurations
@@ -62,5 +62,5 @@ Use the `ubx_compare_cfg.py` file to compare two csv configuration files. The us
 
 Example use:
 ```
-python3 compare_ubx_cfg.py --cfg1 ubx_cfg_passive.csv --cfg2 ubx_cfg_active.csv
+python3 ubx_compare_cfg.py --cfg1 ubx_cfg_passive.csv --cfg2 ubx_cfg_active.csv
 ```

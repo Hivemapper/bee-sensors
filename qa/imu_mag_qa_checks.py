@@ -10,18 +10,22 @@ import os
 import subprocess
 
 import sqlite3
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 def main():
 
     # database path
-    DB_PATH = "/<PATH TO DATABASE FILE>/data-logger.<VERSION>.db"
+    DB_PATH = "/home/<PATH TO DATABASE FILE>/redis_handler-v0-0-3.db"
 
-    logs = parse_database(DB_PATH)
+    logs, metrics = parse_database(DB_PATH)
 
     plot_imu_values(logs["imu"])
     plot_magnetometer_values(logs["mag"])
+    metrics = check_imu_zeros(logs["imu"], metrics)
+    metrics = check_mag_zeros(logs["mag"], metrics)
+    print_metrics(metrics)
 
     plt.show()
 
@@ -46,9 +50,12 @@ def parse_database(db_path):
 
     db_not_present = []
     logs = {
-            "gnss" : [],
             "imu"  : [],
             "mag"  : [],
+            }
+    metrics = {
+            "imu" : {},
+            "mag"  : {},
             }
 
     if not os.path.isfile(db_path):
@@ -91,7 +98,7 @@ def parse_database(db_path):
     # Close the connection
     conn.close()
 
-    return logs
+    return logs, metrics
 
 def recover_sqlite_db(corrupt_db_path, recovered_db_path):
     """
@@ -123,7 +130,7 @@ def plot_imu_values(log_imu):
     """
 
     for session in log_imu["session"].unique():
-        df_temp = log_imu[log_imu["session"]==session]
+        df_temp = log_imu[log_imu["session"]==session].copy()
         df_temp["time"] = pd.to_datetime(df_temp["time"], format="mixed")
         df_temp["acc_total"] = (df_temp["acc_x"]**2 + df_temp["acc_y"]**2 + df_temp["acc_z"]**2)**0.5
 
@@ -154,6 +161,51 @@ def plot_magnetometer_values(log_mag):
     ax.set_zlabel("mag_z")
     
     plt.title("Magnetometer Data in 3D Should Be Approximately Ellipsoidal")
+
+def check_imu_zeros(logger_imu, metrics):
+    if logger_imu is None or len(logger_imu) == 0:
+        return metrics
+
+    for key in ["acc_x","acc_y","acc_z","gyro_x","gyro_y","gyro_z"]:
+        if len(logger_imu) > 0:
+            zero_count_percent = np.round((logger_imu[key].value_counts().get(0.0,0)/float(len(logger_imu)))*100.,2)
+        else:
+            zero_count_percent = "imu database with zero length"
+
+        metrics["imu"][f"percent rows with zero value {key}"] = zero_count_percent
+
+    return metrics
+
+def check_mag_zeros(logger_mag, metrics):
+    if logger_mag is None or len(logger_mag) == 0:
+        return metrics
+
+    for key in ["mag_x","mag_y","mag_z"]:
+        if len(logger_mag) > 0:
+            zero_count_percent = np.round((logger_mag[key].value_counts().get(0.0,0)/float(len(logger_mag)))*100.,2)
+        else:
+            zero_count_percent = "imu database with zero length"
+
+        metrics["mag"][f"percent rows with zero value {key}"] = zero_count_percent
+
+    return metrics
+
+def print_metrics(metrics):
+
+    print("----------------")
+    print("IMU Metrics")
+    print("----------------")
+    for k, v in metrics["imu"].items():
+        print(k,": ",v)
+
+    print("------------")
+    print("MAG Metrics")
+    print("------------")
+    for k, v in metrics["mag"].items():
+        print(k,": ",v)
+
+    print("\n"*2)
+
 
 if __name__ == "__main__":
     main()

@@ -19,6 +19,7 @@ def main(cfg1_filepath, cfg2_filepath):
         Path to second configuration csv file.
 
     """
+    identical = True
 
     cfg1 = []
     with open(cfg1_filepath) as file_obj:
@@ -46,18 +47,22 @@ def main(cfg1_filepath, cfg2_filepath):
         if cfg1_idx == len(cfg1):
             print(cfg2[cfg2_idx][0],"param not in cfg1 file.")
             cfg2_idx += 1
+            identical = False
             continue
         elif cfg2_idx == len(cfg2):
             print(cfg1[cfg1_idx][0],"param not in cfg2 file.")
             cfg1_idx += 1
+            identical = False
             continue
         elif cfg1[cfg1_idx][0] < cfg2[cfg2_idx][0]:
             print(cfg1[cfg1_idx][0],"param not in cfg2 file.")
             cfg1_idx += 1
+            identical = False
             continue
         elif cfg1[cfg1_idx][0] > cfg2[cfg2_idx][0]:
             print(cfg2[cfg2_idx][0],"param not in cfg1 file.")
             cfg2_idx += 1
+            identical = False
             continue
 
         # check if parameters aren't identical
@@ -65,9 +70,14 @@ def main(cfg1_filepath, cfg2_filepath):
             print(cfg1[cfg1_idx][0],"param not identical")
             print("cfg1 has", cfg1[cfg1_idx][1])
             print("cfg2 has", cfg2[cfg2_idx][1])
+            identical = False
 
         cfg1_idx += 1
         cfg2_idx += 1
+
+
+    if identical:
+        print("cfg1 and cfg2 are identical.")
 
 
 
