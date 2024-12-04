@@ -17,8 +17,7 @@ import gnss_lib_py as glp
 def main():
 
     # database path
-    # DB_PATH = "/home/<PATH TO DATABASE FILE>/redis_handler-v0-0-3.db"
-    DB_PATH = "/home/derek/Downloads/test/redis_handler-v0-0-3.db"
+    DB_PATH = "/home/<PATH TO DATABASE FILE>/redis_handler-v0-0-3.db"
 
     logs, metrics = parse_database(DB_PATH)
 
