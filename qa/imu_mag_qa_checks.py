@@ -82,7 +82,7 @@ def parse_database(db_path):
 
         try:
             df = pd.read_sql_query("SELECT * FROM imu", conn)
-            logs["imu"].append(df)
+            logs["imu"] = df
         except Exception as e:
             print(f"imu db error: {e}")
             logs["imu"] = None
