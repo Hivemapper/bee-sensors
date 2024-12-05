@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# During normal QA, run with ./prepare.sh
+# For internal testing, can enable debug mode with ./prepare.sh --debug
+
 systemctl stop map-ai
 echo "Stopped map-ai"
 systemctl stop odc-api
@@ -23,10 +26,32 @@ mount -o remount,rw /
 echo "Remounted rootfs as read-write"
 sleep 1
 
-# change to debug mode
-sed -i 's/"DEBUG_MODE":0/"DEBUG_MODE":1/' /opt/dashcam/bin/config.json
-cat /opt/dashcam/bin/config.json
-echo "Changed to debug mode"
+# Initialize DEBUG variable
+DEBUG=
+
+# Parse command-line arguments
+for arg in "$@"; do
+    case $arg in
+        --debug)
+            DEBUG=true
+            ;;
+        *)
+            # Handle other arguments if necessary
+            ;;
+    esac
+done
+
+# Example usage
+if [[ $DEBUG ]]; then
+    # change to debug mode
+    sed -i 's/"DEBUG_MODE":0/"DEBUG_MODE":1/' /opt/dashcam/bin/config.json
+    cat /opt/dashcam/bin/config.json
+    echo "Changed to debug mode"
+else
+    sed -i 's/"DEBUG_MODE":1/"DEBUG_MODE":0/' /opt/dashcam/bin/config.json
+    cat /opt/dashcam/bin/config.json
+    echo "Debug mode is disabled."
+fi
 
 rm -v /data/recording/framekm/*
 echo "Cleared framekms"
