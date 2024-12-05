@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# first arg is the name of the folder to be created
+# e.g. ./offload.sh 2024_12_01_CTP001
+
 if [ -f ~/.ssh/config ]; then
   echo "Bee ssh config exists"
   if grep -q "HostName test" ~/.ssh/config; then 
