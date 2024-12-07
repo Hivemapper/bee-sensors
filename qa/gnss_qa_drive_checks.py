@@ -68,8 +68,6 @@ def parse_database(db_path):
     try:
         df = pd.read_sql_query("SELECT * FROM gnss", conn)
         logs["gnss"] = df
-        metrics["gnss"]["% rows w/o GNSS lock"] = np.round(100.0 * float(len(df[df["latitude"] == 0.0])) / len(df),2)
-        df = df[df["latitude"] != 0.0]
         gnss_sessions = df["session"].unique()
         
     except Exception as e:
@@ -152,6 +150,7 @@ def plot_gnss_map(logger_gnss):
     gnss_sessions = []
     for session in logger_gnss["session"].unique():
       df_temp = logger_gnss
+      df_temp = df_temp[df_temp["latitude"] != 0.0]
       df_temp = df_temp[df_temp["session"]==session][["latitude","longitude","altitude"]]
 
       temp = glp.NavData(pandas_df=df_temp)
