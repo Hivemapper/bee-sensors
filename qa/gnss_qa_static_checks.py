@@ -1,9 +1,9 @@
-"""Check accelerometer, gyroscope, and magnetometer data for quality assurance.
+"""Check gnss data for quality assurance.
 
 """
 
 __author__ = "D. Knowles"
-__date__ = "04 Dec 2024"
+__date__ = "06 Dec 2024"
 
 
 import os
@@ -19,8 +19,7 @@ import matplotlib.pyplot as plt
 def main():
 
     # database path
-    # DB_PATH = "/home/<PATH TO DATABASE FILE>/redis_handler-v0-0-3.db"
-    DB_PATH = "/home/derek/bee-sensors/data/redis_handler-v0-0-3.db"
+    DB_PATH = "/home/<PATH TO DATABASE FILE>/redis_handler-v0-0-3.db"
 
     # Latitude (deg), Longitude (deg), Altitude (m) of test location
     TEST_LOCATION = (37.78804585139535, -122.39925359640425, 150.)

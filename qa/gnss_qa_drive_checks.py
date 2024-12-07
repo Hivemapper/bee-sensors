@@ -1,4 +1,4 @@
-"""Check accelerometer, gyroscope, and magnetometer data for quality assurance.
+"""Check gnss data for quality assurance.
 
 """
 
