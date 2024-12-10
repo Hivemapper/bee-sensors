@@ -34,6 +34,7 @@ scp -r bee:/data/landmarks './bee_'$1
 scp -r bee:/data/optical_flow './bee_'$1
 scp -r bee:/data/cache './bee_'$1
 scp bee:/data/redis_handler/* './bee_'$1
+scp bee:/data/recording/redis_handler/* './bee_'$1
 scp bee:/data/recording/*.db* './bee_'$1
 scp bee:/data/recording/*.log* './bee_'$1
 scp bee:/data/*.log* './bee_'$1
