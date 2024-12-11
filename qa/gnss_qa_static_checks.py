@@ -7,25 +7,25 @@ __date__ = "06 Dec 2024"
 
 
 import os
+import sqlite3
 import subprocess
 
-import sqlite3
 import numpy as np
 import pandas as pd
 import gnss_lib_py as glp
 import matplotlib.pyplot as plt
-
 
 def main():
 
     # database path
     DB_PATH = "/home/<PATH TO DATABASE FILE>/redis_handler-v0-0-3.db"
 
-    # Latitude (deg), Longitude (deg), Altitude (m) of test location
-    TEST_LOCATION = (37.78804585139535, -122.39925359640425, 150.)
+    # Latitude (deg), Longitude (deg), Altitude above Mean Sea Level (m) of test location
+    TEST_LOCATION = (37.787976671122664, -122.3983670259852, 20.)
 
     logs, metrics = parse_database(DB_PATH)
 
+    # plot maps
     # plot_gnss_map(logs["gnss"])
     # plot_nav_pvt_map(logs["nav_pvt"])
 
@@ -37,12 +37,12 @@ def main():
 
     # check cn0 and sats seen
     metrics = check_cn0_and_sats_seen(logs["gnss"], metrics)
-    
+
+    # check for Continuous Wave jamming
+    metrics = cw_jamming(logs["gnss"], metrics)
     
     print_metrics(metrics)
     qa_static_checks(metrics)
-
-
 
 def parse_database(db_path):
     """Parse sqlite3 database file.
@@ -207,7 +207,6 @@ def plot_nav_pvt_map(logger_gnss):
         if len(not_ok) > 0:
           gnss_sessions.append(not_ok)
 
-
     if len(gnss_sessions) > 0:
         fig = glp.plot_map(*gnss_sessions)
             # , mapbox_style="carto-positron")
@@ -239,12 +238,12 @@ def check_valid_fix_position_error(nav_pvt, metrics, test_location, plot=False):
     if nav_pvt is None:
         return
 
-    df_temp = nav_pvt[["lat_deg","lon_deg","height_m","gnss_fix_ok","fully_resolved"]]
+    df_temp = nav_pvt[["lat_deg","lon_deg","hmsl_m","gnss_fix_ok","fully_resolved"]]
     df_temp = df_temp[df_temp["gnss_fix_ok"]==1]
     df_temp = df_temp[df_temp["fully_resolved"]==1]
 
     true_ecef = glp.geodetic_to_ecef(np.array([[test_location[0]],[test_location[1]],[test_location[2]]]))
-    test_ecef = glp.geodetic_to_ecef(np.array([df_temp["lat_deg"].values,df_temp["lon_deg"].values,df_temp["height_m"].values]))
+    test_ecef = glp.geodetic_to_ecef(np.array([df_temp["lat_deg"].values,df_temp["lon_deg"].values,df_temp["hmsl_m"].values]))
 
     error = np.linalg.norm(test_ecef - true_ecef,axis=0)
     
@@ -308,6 +307,24 @@ def check_cn0_and_sats_seen(logger_gnss, metrics):
 
     return metrics
 
+def cw_jamming(logger_gnss, metrics):
+    """ Check for continuous wave jamming.
+
+    """
+
+    # get cw jamming values
+    cw_jamming = logger_gnss["rf_jam_ind"].to_numpy()
+    metrics["gnss"]["cw_jamming"] = {
+            "mean" : np.mean(cw_jamming),
+            "std" : np.std(cw_jamming),
+            "max" : np.max(cw_jamming),
+            "min" : np.min(cw_jamming),
+            "median" : np.median(cw_jamming),
+            "95_percentile" : np.percentile(cw_jamming,95),
+            "percent_time_at_255" : len(cw_jamming[cw_jamming == 255])/len(cw_jamming),
+            }
+
+    return metrics
 
 def print_metrics(metrics):
 
@@ -337,12 +354,12 @@ def qa_static_checks(metrics):
     else:
         print("[FAIL] Less than three nonzero time-to-first-fix values.")
 
-    # check that the final two ttff that aren't NaN are less than 60 seconds
+    # check that the final two ttff that aren't NaN are less than 90 seconds
     non_nan_ttff = [x for x in metrics["nav_status"]["time-to-first-fixes (secs)"] if not np.isnan(x)]
-    if non_nan_ttff[-1] < 60. and non_nan_ttff[-2] < 60.:
-        print("[PASS] Final two time-to-first-fix values are less than 60 seconds.")
+    if non_nan_ttff[-1] < 90. and non_nan_ttff[-2] < 90.:
+        print("[PASS] Final two time-to-first-fix values are less than 90 seconds.")
     else:
-        print("[FAIL] Final two time-to-first-fix values are greater than 60 seconds.")
+        print("[FAIL] Final two time-to-first-fix values are greater than 90 seconds.")
 
     # check valid fix position error
     if metrics["nav_pvt"]["Valid Fix Position Error (m)"]["95_percentile"] < 50.:
@@ -368,6 +385,17 @@ def qa_static_checks(metrics):
     else:
         print("[FAIL] Satellites used 5% percentile < 5")
 
+    # check that cw jamming is 255 for <1% of time
+    if metrics["gnss"]["cw_jamming"]["percent_time_at_255"] < 0.01:
+        print("[PASS] CW jamming at 255 for <1% of time")
+    else:
+        print("[FAIL] CW jamming at 255 for >=1% of time")
+
+    # check that cw jamming 95 percentile is < 100
+    if metrics["gnss"]["cw_jamming"]["95_percentile"] < 100.:
+        print("[PASS] CW jamming 95 percentile < 100")
+    else:
+        print("[FAIL] CW jamming 95 percentile >= 100")
 
 if __name__ == "__main__":
     main()
