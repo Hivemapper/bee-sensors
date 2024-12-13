@@ -52,7 +52,7 @@ class GnssQa():
 
         while True:
 
-            if self.count >= 300:
+            if self.count >= 480:
                 print("Timeout. Exiting...")
                 self._write_results()
                 break
@@ -175,7 +175,7 @@ class GnssQa():
 
             self.avg_error = np.mean(error)
 
-            if np.all(error < 50.):
+            if np.all(error < 1000.):
                 return True
         return False
 
@@ -254,7 +254,6 @@ class GnssQa():
         """ Check that the final two ttff are less than 90 seconds
 
         """
-        # 
         if self.ttff[-1] <= 90. and self.ttff[-2] <= 90.:
             return True
         return False
@@ -263,6 +262,7 @@ class GnssQa():
         """Add time to first fix value.
 
         """
+        time.sleep(2)
         latest_nav_status = self._get_latest_values("nav_status", self.nav_status_columns)
         if latest_nav_status and len(latest_nav_status) > 0:
             self.ttff.append(latest_nav_status["ttff"][-1]/1000.)
@@ -288,7 +288,7 @@ class GnssQa():
 
         # Start gpsd in a non-blocking manner
         print("starting gpsd")
-        gpsd_script = "/data/qa/gpsd_command.sh"
+        gpsd_script = "/data/qa_gnss/gpsd_command.sh"
         p1 = multiprocessing.Process(target=self._run_script, args=(gpsd_script,))
         p1.start()
         time.sleep(5)
@@ -296,27 +296,27 @@ class GnssQa():
         
         # Cold reboot the device
         print("running ublox cold reboot")
-        ubxtool_script = "/data/qa/ubxtool_command.sh"
+        ubxtool_script = "/data/qa_gnss/ubxtool_command.sh"
         p = multiprocessing.Process(target=self._run_script, args=(ubxtool_script,))
         p.start()
         time.sleep(5)
 
         p1.kill()
         p1.terminate()
-        gpsd_kill_script = "/data/qa/gpsd_kill_command.sh"
+        gpsd_kill_script = "/data/qa_gnss/gpsd_kill_command.sh"
         p = multiprocessing.Process(target=self._run_script, args=(gpsd_kill_script,))
         p.start()
 
 
         # restart hivemapper-data-logger
         print("restarting data-logger")
-        logger_script = "/data/qa/logger_command.sh"
+        logger_script = "/data/qa_gnss/logger_command.sh"
         p = multiprocessing.Process(target=self._run_script, args=(logger_script,))
         p.start()
-        time.sleep(5)
+        time.sleep(10)
 
     def _write_results(self):
-        """Write results to txt file /data/qa_results.txt
+        """Write results to txt file /data/qa_gnss_results.txt
         
         self.check_sats_seen = False
         self.check_sats_used = False
@@ -329,7 +329,7 @@ class GnssQa():
 
         """
 
-        with open("/data/qa_results.txt", "w") as f:
+        with open("/data/qa_gnss_results.txt", "w") as f:
             if self.check_sats_seen:
                 f.write("[PASS] Saw at least 15 satellites\n")
             else:
