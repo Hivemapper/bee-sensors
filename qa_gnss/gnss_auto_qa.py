@@ -4,15 +4,18 @@
 
 import time
 import sqlite3
+import argparse
 import subprocess
 import multiprocessing
 
 import numpy as np
 
 class GnssQa():
-    def __init__(self, db_path, test_location):
+    def __init__(self, db_path, test_location, name="", sn=""):
         self.database_path = db_path
         self.test_location = test_location
+        self.name = name
+        self.sn = sn
 
         self.nav_pvt_columns = ["id", "system_time", "session",
                                 "fully_resolved","gnss_fix_ok",
@@ -175,7 +178,7 @@ class GnssQa():
 
             self.avg_error = np.mean(error)
 
-            if np.all(error < 1000.):
+            if np.all(error < 50.):
                 return True
         return False
 
@@ -329,7 +332,14 @@ class GnssQa():
 
         """
 
-        with open("/data/qa_gnss_results.txt", "w") as f:
+        filename = "/data/qa_gnss_results"
+        if self.name != "":
+            filename += "_"+self.name
+        if self.sn != "":
+            filename += "_"+self.sn
+        filename += ".txt"
+
+        with open(filename, "w") as f:
             if self.check_sats_seen:
                 f.write("[PASS] Saw at least 15 satellites\n")
             else:
@@ -420,6 +430,11 @@ class GnssQa():
 
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser(description="Process device information.")
+    parser.add_argument("--name", default="", help="Name of the technician.")
+    parser.add_argument("--sn", default="", help="Serial number of the Bee device.")
+    args = parser.parse_args()
+
     # database path
     DB_PATH = "/data/redis_handler/redis_handler-v0-0-3.db" # <= firmware 5.0.19
     # DB_PATH = "/data/recording/redis_handler/redis_handler-v0-0-3.db" #  5.0.20 >= firmware < 5.026
@@ -430,5 +445,5 @@ if __name__ == "__main__":
     TEST_LOCATION = (40.54570923442922, -79.82677996611702, 260.)   # Hellbender, Pittsburgh, PA
     # TEST_LOCATION = (37.4692648, -122.2920581, 165.)                # Edgewood park and ride
 
-    gnss_qa = GnssQa(DB_PATH, TEST_LOCATION)
+    gnss_qa = GnssQa(DB_PATH, TEST_LOCATION, args.name, args.sn)
     gnss_qa.run()
