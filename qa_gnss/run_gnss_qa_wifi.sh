@@ -16,6 +16,7 @@ ssh -t -o StrictHostKeyChecking=no root@192.168.0.10 "python3 /data/qa_gnss/gnss
 ssh -t -o StrictHostKeyChecking=no root@192.168.0.10 "cat /data/qa_gnss_results_\"$name\"_\"$sn\".txt"
 
 scp -o StrictHostKeyChecking=no root@192.168.0.10:/data/qa_gnss_results_"$name"_"$sn".txt $HOME/Desktop
+scp -r -o StrictHostKeyChecking=no root@192.168.0.10:/data/redis_handler/ $HOME/Desktop/redis_handler_"$name"_"$sn"/
 
 echo "Press any key to exit..."
 read -n 1

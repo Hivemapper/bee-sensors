@@ -45,13 +45,27 @@ def get_latest_values(database_path, table_name, columns, order_by_column):
         if conn:
             conn.close()
 
-database_path = "/data/recording/data-logger.v2.0.0.db" # Path to SQLite database file
-gnss_columns = ["id", "system_time", "satellites_seen","satellites_used", "rf_jam_ind"]  # Columns to fetch
+# database_path = "/data/recording/data-logger.v2.0.0.db" # Path to SQLite database file
+# database_path = "/data/recording/redis_handler/redis_handler-v0-0-4.db" #
+database_path = "/data/redis_handler/redis_handler-v0-0-3.db" #  5.0.20 >= firmware < 5.026
+
+nav_pvt_columns = ["id", "system_time", "session",
+                        "fully_resolved","gnss_fix_ok",
+                        "lat_deg","lon_deg","hmsl_m"]
+nav_status_columns = ["id", "itow_ms", "session", 
+                            "ttff","msss"]
+gnss_columns = ["id", "system_time", "session",
+                        "satellites_seen","satellites_used",
+                        "cno","rf_jam_ind"]
 order_by_column = "id"
 
 while True:
 
     latest_gnss = get_latest_values(database_path, "gnss", gnss_columns, order_by_column)
     print(latest_gnss)
+    latest_nav_status = get_latest_values(database_path, "nav_status", nav_status_columns, order_by_column)
+    print(latest_nav_status)
+    latest_nav_pvt = get_latest_values(database_path, "nav_pvt", nav_pvt_columns, order_by_column)
+    print(latest_nav_pvt)
 
     time.sleep(1)

@@ -441,9 +441,10 @@ if __name__ == "__main__":
     # DB_PATH = "/data/recording/data-logger.v2.0.0.db" # > 5.0.26
 
     # Latitude (deg), Longitude (deg), Altitude above Mean Sea Level (m) of test location
-    # TEST_LOCATION = (37.787976671122664, -122.3983670259852, 20.) # SalesForce Park, San Francisco
-    TEST_LOCATION = (40.54570923442922, -79.82677996611702, 260.)   # Hellbender, Pittsburgh, PA
+    # TEST_LOCATION = (37.787976671122664, -122.3983670259852, 20.)   # SalesForce Park, San Francisco
     # TEST_LOCATION = (37.4692648, -122.2920581, 165.)                # Edgewood park and ride
+    # TEST_LOCATION = (40.54570923442922, -79.82677996611702, 260.)   # Hellbender, Pittsburgh, PA (West side)
+    TEST_LOCATION = (40.54584991471907, -79.82566018301341, 260.)   # Hellbender, Pittsburgh, PA (East dock)
 
     gnss_qa = GnssQa(DB_PATH, TEST_LOCATION, args.name, args.sn)
     gnss_qa.run()
