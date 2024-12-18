@@ -61,6 +61,8 @@ rm -v /data/recording/csv/*
 echo "Cleared csv"
 rm -v /data/recording/data-logger*
 echo "Cleared data-logger DB"
+rm -v /data/recording/odc-api*
+echo "Cleared odc-api DB and logs"
 rm -rv /data/redis_handler/
 rm -rv /data/recording/redis_handler/
 echo "Cleared redis DB"
