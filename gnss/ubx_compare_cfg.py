@@ -28,7 +28,7 @@ def main(cfg1_filepath, cfg2_filepath):
             if rr == 0:
                 continue
             else:
-                cfg1.append([row[2],row[4]])
+                cfg1.append([row[2],row[4],row[0]])
     cfg2 = []
     with open(cfg2_filepath) as file_obj:
         reader = csv.reader(file_obj)
@@ -36,7 +36,7 @@ def main(cfg1_filepath, cfg2_filepath):
             if rr == 0:
                 continue
             else:
-                cfg2.append([row[2],row[4]])
+                cfg2.append([row[2],row[4],row[0]])
 
     # compare with two pointers
     cfg1_idx = 0
@@ -45,29 +45,29 @@ def main(cfg1_filepath, cfg2_filepath):
 
         # check if parameter exists in one file but not the other
         if cfg1_idx == len(cfg1):
-            print(cfg2[cfg2_idx][0],"param not in cfg1 file.")
+            print(cfg2[cfg2_idx][2],cfg2[cfg2_idx][0],"param not in cfg1 file.")
             cfg2_idx += 1
             identical = False
             continue
         elif cfg2_idx == len(cfg2):
-            print(cfg1[cfg1_idx][0],"param not in cfg2 file.")
+            print(cfg1[cfg1_idx][2],cfg1[cfg1_idx][0],"param not in cfg2 file.")
             cfg1_idx += 1
             identical = False
             continue
         elif cfg1[cfg1_idx][0] < cfg2[cfg2_idx][0]:
-            print(cfg1[cfg1_idx][0],"param not in cfg2 file.")
+            print(cfg1[cfg1_idx][2],cfg1[cfg1_idx][0],"param not in cfg2 file.")
             cfg1_idx += 1
             identical = False
             continue
         elif cfg1[cfg1_idx][0] > cfg2[cfg2_idx][0]:
-            print(cfg2[cfg2_idx][0],"param not in cfg1 file.")
+            print(cfg2[cfg2_idx][2],cfg2[cfg2_idx][0],"param not in cfg1 file.")
             cfg2_idx += 1
             identical = False
             continue
 
         # check if parameters aren't identical
         elif cfg1[cfg1_idx][1] != cfg2[cfg2_idx][1]:
-            print(cfg1[cfg1_idx][0],"param not identical")
+            print(cfg1[cfg1_idx][2],cfg1[cfg1_idx][0],"param not identical")
             print("cfg1 has", cfg1[cfg1_idx][1])
             print("cfg2 has", cfg2[cfg2_idx][1])
             identical = False

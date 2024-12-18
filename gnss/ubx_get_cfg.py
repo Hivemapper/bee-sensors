@@ -88,13 +88,16 @@ def main(ubxtool_cmd, dashcam_address, name):
     """
 
     all_data = []
-    for cfg_group in CFG_GROUPS:
-        output = run_ubxtool(ubxtool_cmd + ' -g '+cfg_group+',0,0,1200 '\
-                          + dashcam_address)
 
-        data = add_cfg_data(output,cfg_group)
-        print("read", len(data),"params in CFG group",cfg_group)
-        all_data += data
+    layers = ["0","7"]
+    for layer in layers:
+        for cfg_group in CFG_GROUPS:
+            output = run_ubxtool(ubxtool_cmd + ' -g '+cfg_group+','+layer+',0,1200 '\
+                            + dashcam_address)
+
+            data = add_cfg_data(output,cfg_group)
+            print("read", len(data),"params in CFG group",cfg_group,"from layer",layer)
+            all_data += data
 
     write_to_file(all_data, name)
 
