@@ -5,7 +5,7 @@
 __author__ = "D. Knowles"
 __date__ = "24 Oct 2024"
 
-
+import argparse
 import os
 import subprocess
 
@@ -14,10 +14,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def main(targetPath):
-
-    # database path
-    
+def main(targetPath, passVal):    
 
     logs, metrics = parse_database(targetPath)
 
@@ -25,8 +22,10 @@ def main(targetPath):
     plot_magnetometer_values(logs["mag"])
     metrics = check_imu_zeros(logs["imu"], metrics)
     metrics = check_mag_zeros(logs["mag"], metrics)
-    print_metrics(metrics)
-
+    if print_metrics(metrics, passVal):
+      print("IMU AND MAG WORKING: Check Graphs before binning camera.")
+    else:
+      print("IMU AND MAG FAIL: Isolate camera to rejects.")
     plt.show()
 
 def parse_database(db_path):
@@ -190,25 +189,37 @@ def check_mag_zeros(logger_mag, metrics):
 
     return metrics
 
-def print_metrics(metrics):
+def print_metrics(metrics, passVal):
+    didPass = True
 
     print("----------------")
     print("IMU Metrics")
     print("----------------")
     for k, v in metrics["imu"].items():
         print(k,": ",v)
-
+        if(v >= passVal):
+          didPass = False
     print("------------")
     print("MAG Metrics")
     print("------------")
     for k, v in metrics["mag"].items():
         print(k,": ",v)
-
+        if(v >= passVal):
+          didPass = False
+          
     print("\n"*2)
 
+    return didPass
+
+def setupParser():
+    parser = argparse.ArgumentParser(description='IMU CHECK')
+    parser.add_argument('--logTarget', type=str, default="", help="DB file to load and check against")
+    parser.add_argument('--ndThresh', type=float, default=1.00, help="Percentage of zeros to threshold pass/fail. Default 1.00")
+    return parser.parse_args()
 
 if __name__ == "__main__":
-  
+    args = setupParser()
+    print(args)
     #DEFAULT_DB_PATH = "/home/<PATH TO DATABASE FILE>/redis_handler-v0-0-3.db"
-    targetPath = "/usr/share/datalogs/bee_ENGProto020/redis_handler-v0-0-3.db"
-    main(targetPath)
+    #targetPath = "/usr/share/datalogs/bee_ENGProto020/redis_handler-v0-0-3.db"
+    main(args.logTarget, args.ndThresh)
