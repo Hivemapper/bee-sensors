@@ -15,7 +15,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 def main(targetPath, passVal):    
-
+    retVal = False
+    
     logs, metrics = parse_database(targetPath)
 
     plot_imu_values(logs["imu"])
@@ -24,9 +25,13 @@ def main(targetPath, passVal):
     metrics = check_mag_zeros(logs["mag"], metrics)
     if print_metrics(metrics, passVal):
       print("IMU AND MAG WORKING: Check Graphs before binning camera.")
+      retVal = True
     else:
       print("IMU AND MAG FAIL: Isolate camera to rejects.")
+      retVal = False
     plt.show()
+
+    return retVal
 
 def parse_database(db_path):
     """Parse sqlite3 database file.
