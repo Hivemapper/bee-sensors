@@ -14,12 +14,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def main():
+def main(targetPath):
 
     # database path
-    DB_PATH = "/home/<PATH TO DATABASE FILE>/redis_handler-v0-0-3.db"
+    
 
-    logs, metrics = parse_database(DB_PATH)
+    logs, metrics = parse_database(targetPath)
 
     plot_imu_values(logs["imu"])
     plot_magnetometer_values(logs["mag"])
@@ -208,4 +208,7 @@ def print_metrics(metrics):
 
 
 if __name__ == "__main__":
-    main()
+  
+    #DEFAULT_DB_PATH = "/home/<PATH TO DATABASE FILE>/redis_handler-v0-0-3.db"
+    targetPath = "/usr/share/datalogs/bee_ENGProto020/redis_handler-v0-0-3.db"
+    main(targetPath)
