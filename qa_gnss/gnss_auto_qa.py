@@ -300,11 +300,13 @@ class GnssQa():
         """
         print("Checking 15sec of FSYNC connection")
 
-        for _ in range(5):
+        for ii in range(5):
+            print(f"Attempt #{ii} to start data logger")
             fsync_waits = self._run_data_logger()
             if len(fsync_waits) > 0:
                 break
-
+        
+        print("Successful FSYNC, tallying")
         self.fsync_waits = fsync_waits
         
         if len(fsync_waits) < 500:
