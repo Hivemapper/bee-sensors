@@ -140,6 +140,7 @@ class GnssQa():
             elif self.state == 4:
                 subprocess.run(["systemctl", "disable", "hivemapper-data-logger"])
                 subprocess.run(["systemctl", "stop", "hivemapper-data-logger"])
+                print("hivemapper-data-logger presumably stopped")
                 time.sleep(10)
                 subprocess.run(["chmod", "+x", "/data/qa_gnss/datalogger"])
                 self.check_fsync_connection = self._check_fsync_connection()
@@ -321,7 +322,7 @@ class GnssQa():
         fsync_wait_count = 0
 
         command = ["/data/qa_gnss/datalogger", "log",
-                   "--gnss-mga-offline-file-path", "/data/mgaoffline.ubx",
+                   "--gnss-mga-offline-file-path=/data/mgaoffline.ubx",
                    "--imu-json-destination-folder=/data/recording/imu",
                    "--gnss-json-destination-folder=/data/recording/gps",
                    "--db-output-path=/data/recording/data-logger.v2.0.0.db",
@@ -332,8 +333,7 @@ class GnssQa():
                    "--gnss-json-save-interval=30s",
                    "--imu-json-save-interval=5s",
                    "--imu-axis-map=CamX:Y,CamY:X,CamZ:Z",
-                   "--imu-inverted",
-                   "X:true,Y:false,Z:false",
+                   "--imu-inverted=X:true,Y:false,Z:false",
                    "--enable-magnetometer",
                    "--enable-redis-logs"]
 
