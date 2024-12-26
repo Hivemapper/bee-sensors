@@ -331,7 +331,7 @@ class GnssQa():
                    "--db-log-ttl=30m",
                    "--gnss-dev-path=/dev/ttyS2",
                    "--imu-dev-path=/dev/spidev0.0",
-                   "--gnss-initial-baud-rate=460800",
+                   "--gnss-initial-baud-rate=921600",
                    "--gnss-json-save-interval=30s",
                    "--imu-json-save-interval=5s",
                    "--imu-axis-map=CamX:Y,CamY:X,CamZ:Z",
@@ -361,10 +361,8 @@ class GnssQa():
                     line = process.stdout.readline()
                     if line:
                         if "Fsync{FSYNC interrupt: false," in line:
-                            print(f"No interrupt, add 1")
                             fsync_wait_count += 1
                         elif "Fsync{FSYNC interrupt: true," in line:
-                            print(f"Got some fsyncs {fsync_wait_count}")
                             fsync_waits.append(fsync_wait_count)
                             fsync_wait_count = 0
 
