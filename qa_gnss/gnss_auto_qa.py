@@ -140,7 +140,7 @@ class GnssQa():
             elif self.state == 4:
                 subprocess.run(["systemctl", "disable", "hivemapper-data-logger"])
                 subprocess.run(["systemctl", "stop", "hivemapper-data-logger"])
-                time.sleep(2)
+                time.sleep(10)
                 subprocess.run(["chmod", "+x", "/data/qa_gnss/datalogger"])
                 self.check_fsync_connection = self._check_fsync_connection()
                 subprocess.run(["systemctl", "enable", "hivemapper-data-logger"])
@@ -299,7 +299,7 @@ class GnssQa():
         """
         print("Checking 15sec of FSYNC connection")
 
-        for _ in range(3):
+        for _ in range(5):
             fsync_waits = self._run_data_logger()
             if len(fsync_waits) > 0:
                 break
@@ -481,6 +481,9 @@ class GnssQa():
             f.write("\n")
             f.write("Avg position error [m]: ")
             f.write(str(self.avg_error))
+            f.write("\n")
+            f.write("FSYNC wait counts: ")
+            f.write(str(self.fsync_waits))
             f.write("\n")
 
     def _get_latest_values(self, table_name, columns, order_by_column = "id"):
