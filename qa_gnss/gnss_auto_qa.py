@@ -3,6 +3,7 @@
 """
 
 import time
+import textwrap
 import sqlite3
 import argparse
 import subprocess
@@ -550,7 +551,7 @@ if __name__ == "__main__":
                       4. Hellbender East Dock,   Pittsburgh PA
                    """
     parser = argparse.ArgumentParser(description="Process device information.", 
-                                     epilog=textwrap.dedent(locationText))
+                                     epilog=textwrap.dedent(location_text))
     parser.add_argument("--name", type=str, default="", help="Name of the technician.")
     parser.add_argument("--sn", type=str, default="", help="Serial number of the Bee device.")
     parser.add_argument("--testLocNum", type=int, default=-1, help="Test location #. See below.")
