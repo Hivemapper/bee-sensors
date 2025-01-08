@@ -1,4 +1,11 @@
+
+import time
 import subprocess
+
+def reenable_and_test_LTE():
+  subprocess.run(["systemctl", "enable", "lte"])
+  time.sleep(3)
+  subprocess.run(["minicom", "-D", "/dev/ttyUSB2", "-S", "check_lte_script.txt", "-C", "lte_capture.txt"])
 
 def get_enabled_services():
     """Gets a list of enabled systemctl services."""
@@ -39,4 +46,7 @@ def check_enabled_services():
             print(f"[PASS] Service {service} is enabled.")
 
 if __name__ == "__main__":
+    print("Re-enabling and testing LTE:")
+    reenable_and_test_LTE()
+    print("Checking all services:")
     check_enabled_services()

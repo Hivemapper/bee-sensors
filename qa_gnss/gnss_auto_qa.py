@@ -3,12 +3,20 @@
 """
 
 import time
+import textwrap
 import sqlite3
 import argparse
 import subprocess
 import multiprocessing
 
 import numpy as np
+
+# Latitude (deg), Longitude (deg), Altitude above Mean Sea Level (m) of test location
+TEST_LOCATION_MAP = {"SalesForce Park"       : (37.787976671122664, -122.3983670259852 ,  20. ), #SF, CA
+                     "Edgewood Park&Ride"    : (37.4692648        , -122.2920581       , 165. ), #Ladera, CA
+                     "Hellbender, West Entr.": (40.54570923442922 ,  -79.82677996611702, 260. ), #PGH, PA
+                     "Hellbender, East Entr.": (40.54584991471907 ,  -79.82566018301341, 260. ), #PGH, PA
+                    }
 
 class GnssQa():
     def __init__(self, db_path, test_location, name="", sn=""):
@@ -140,6 +148,7 @@ class GnssQa():
             elif self.state == 4:
                 subprocess.run(["systemctl", "disable", "hivemapper-data-logger"])
                 subprocess.run(["systemctl", "stop", "hivemapper-data-logger"])
+                print("hivemapper-data-logger presumably stopped")
                 time.sleep(10)
                 subprocess.run(["chmod", "+x", "/data/qa_gnss/datalogger"])
                 self.check_fsync_connection = self._check_fsync_connection()
@@ -299,11 +308,13 @@ class GnssQa():
         """
         print("Checking 15sec of FSYNC connection")
 
-        for _ in range(5):
+        for ii in range(5):
+            print(f"Attempt #{ii} to start data logger")
             fsync_waits = self._run_data_logger()
             if len(fsync_waits) > 0:
                 break
-
+        
+        print("Successful FSYNC, tallying")
         self.fsync_waits = fsync_waits
         
         if len(fsync_waits) < 500:
@@ -321,19 +332,18 @@ class GnssQa():
         fsync_wait_count = 0
 
         command = ["/data/qa_gnss/datalogger", "log",
-                   "--gnss-mga-offline-file-path", "/data/mgaoffline.ubx",
+                   "--gnss-mga-offline-file-path=/data/mgaoffline.ubx",
                    "--imu-json-destination-folder=/data/recording/imu",
                    "--gnss-json-destination-folder=/data/recording/gps",
                    "--db-output-path=/data/recording/data-logger.v2.0.0.db",
                    "--db-log-ttl=30m",
                    "--gnss-dev-path=/dev/ttyS2",
                    "--imu-dev-path=/dev/spidev0.0",
-                   "--gnss-initial-baud-rate=460800",
+                   "--gnss-initial-baud-rate=921600",
                    "--gnss-json-save-interval=30s",
                    "--imu-json-save-interval=5s",
                    "--imu-axis-map=CamX:Y,CamY:X,CamZ:Z",
-                   "--imu-inverted",
-                   "X:true,Y:false,Z:false",
+                   "--imu-inverted=X:true,Y:false,Z:false",
                    "--enable-magnetometer",
                    "--enable-redis-logs"]
 
@@ -534,10 +544,17 @@ class GnssQa():
                 conn.close()
 
 if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser(description="Process device information.")
-    parser.add_argument("--name", default="", help="Name of the technician.")
-    parser.add_argument("--sn", default="", help="Serial number of the Bee device.")
+    location_text = """Location Option Numbers:
+                      1. SalesForce Park,     San Francisco CA
+                      2. Edgewood Park and Ride,     Ladera CA
+                      3. Hellbender West Rollup, Pittsburgh PA
+                      4. Hellbender East Dock,   Pittsburgh PA
+                   """
+    parser = argparse.ArgumentParser(description="Process device information.", 
+                                     epilog=textwrap.dedent(location_text))
+    parser.add_argument("--name", type=str, default="", help="Name of the technician.")
+    parser.add_argument("--sn", type=str, default="", help="Serial number of the Bee device.")
+    parser.add_argument("--testLocNum", type=int, default=-1, help="Test location #. See below.")
     args = parser.parse_args()
 
     # database path
@@ -545,11 +562,15 @@ if __name__ == "__main__":
     # DB_PATH = "/data/recording/redis_handler/redis_handler-v0-0-3.db" #  5.0.20 >= firmware < 5.026
     # DB_PATH = "/data/recording/data-logger.v2.0.0.db" # > 5.0.26
 
-    # Latitude (deg), Longitude (deg), Altitude above Mean Sea Level (m) of test location
-    # TEST_LOCATION = (37.787976671122664, -122.3983670259852, 20.)   # SalesForce Park, San Francisco
-    # TEST_LOCATION = (37.4692648, -122.2920581, 165.)                # Edgewood park and ride
-    # TEST_LOCATION = (40.54570923442922, -79.82677996611702, 260.)   # Hellbender, Pittsburgh, PA (West side)
-    TEST_LOCATION = (40.54584991471907, -79.82566018301341, 260.)   # Hellbender, Pittsburgh, PA (East dock)
-
-    gnss_qa = GnssQa(DB_PATH, TEST_LOCATION, args.name, args.sn)
+    loc_arg_list = ["SalesForce Park", "Edgewood Park&Ride", "Hellbender, West Entr.", "Hellbender, East Entr."] 
+    sel_num = 3
+    if args.testLocNum == -1: 
+        print("No location was selected. Please select one of the following:")
+        print(location_text)
+        sel_num = int(input("Option:")) - 1
+    else:    
+        sel_num = args.testLocNum
+    
+    gnss_qa = GnssQa(DB_PATH, TEST_LOCATION_MAP[loc_arg_list[sel_num]], args.name, args.sn)
     gnss_qa.run()
+    
