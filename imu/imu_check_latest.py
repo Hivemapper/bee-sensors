@@ -46,22 +46,23 @@ def get_latest_values(database_path, table_name, columns, order_by_column):
             conn.close()
 
 # database_path = "/data/recording/data-logger.v2.0.0.db" # Path to SQLite database file
-# database_path = "/data/redis_handler/redis_handler-v0-0-3.db" #  5.0.19 <= firmware < 5.0.26
+database_path = "/data/redis_handler/redis_handler-v0-0-3.db" #  5.0.19 <= firmware < 5.0.26
 # database_path = "/data/recording/redis_handler/redis_handler-v0-0-3.db" #  5.026 <= firmware < 5.1.4
 # database_path = "/data/recording/redis_handler/sensors-v0-0-1.db" #  5.1.4 <= firmware < 5.1.9
-sensors_path = "/data/recording/redis_handler/sensors-v0-0-2.db" #  5.1.10 <= firmware
-fusion_path = "/data/recording/redis_handler/fusion-v0-0-2.db" #  5.1.10 <= firmware
+# sensors_path = "/data/recording/redis_handler/sensors-v0-0-2.db" #  5.1.10 <= firmware
+# fusion_path = "/data/recording/redis_handler/fusion-v0-0-2.db" #  5.1.10 <= firmware
 
-sensors_columns = ["id", "time", "acc_x", "acc_y", "acc_z"]#, "gyro_x", "gyro_y", "gyro_z", "temperature"]
-fusion_columns =  ["id", "time", "acc_x", "acc_y", "acc_z"]#, "gyro_x", "gyro_y", "gyro_z", "temperature"]
+imu_columns = ["id", "time", "acc_x", "acc_y", "acc_z"]#, "gyro_x", "gyro_y", "gyro_z", "temperature"]
 order_by_column = "id"
 
 while True:
 
-    latest_sensors = get_latest_values(sensors_path, "imu", sensors_columns, order_by_column)
-    print("sensors:",latest_sensors)
-    latest_fusion = get_latest_values(fusion_path, "imu", fusion_columns, order_by_column)
-    print("fusion: ",latest_fusion)
+    latest_imu = get_latest_values(database_path, "imu", imu_columns, order_by_column)
+    print("redis-handler:",latest_imu)
+    # latest_sensors = get_latest_values(sensors_path, "imu", imu_columns, order_by_column)
+    # print("sensors:",latest_sensors)
+    # latest_fusion = get_latest_values(fusion_path, "imu", imu_columns, order_by_column)
+    # print("fusion: ",latest_fusion)
     print("\n")
 
     time.sleep(1)
