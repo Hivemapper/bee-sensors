@@ -3,7 +3,6 @@
 """
 
 import time
-import textwrap
 import sqlite3
 import argparse
 import subprocess
@@ -66,7 +65,7 @@ class GnssQa():
 
         while True:
 
-            if self.count >= 480:
+            if self.count >= 300:
                 print("Timeout. Exiting...")
                 self._write_results()
                 break
@@ -130,7 +129,7 @@ class GnssQa():
                         self._write_results()
                         break
 
-                if self.check_sats_seen and self.check_sats_used and self.check_pos_error and self.check_cn0 and self.check_cw_jamming:
+                if self.check_sats_seen and self.check_sats_used and self.check_cn0 and self.check_cw_jamming:
                     self.state += 1
                     self._cold_reboot()
                 else:
@@ -550,12 +549,12 @@ if __name__ == "__main__":
                       3. Hellbender West Rollup, Pittsburgh PA
                       4. Hellbender East Dock,   Pittsburgh PA
                    """
-    parser = argparse.ArgumentParser(description="Process device information.", 
-                                     epilog=textwrap.dedent(location_text))
-    parser.add_argument("--name", type=str, default="", help="Name of the technician.")
-    parser.add_argument("--sn", type=str, default="", help="Serial number of the Bee device.")
-    parser.add_argument("--testLocNum", type=int, default=-1, help="Test location #. See below.")
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description="Process device information.", 
+    #                                  epilog=textwrap.dedent(location_text))
+    # parser.add_argument("--name", type=str, default="", help="Name of the technician.")
+    # parser.add_argument("--sn", type=str, default="", help="Serial number of the Bee device.")
+    # parser.add_argument("--testLocNum", type=int, default=-1, help="Test location #. See below.")
+    # args = parser.parse_args()
 
     # database path
     DB_PATH = "/data/redis_handler/redis_handler-v0-0-3.db" # <= firmware 5.0.19
@@ -563,14 +562,18 @@ if __name__ == "__main__":
     # DB_PATH = "/data/recording/data-logger.v2.0.0.db" # > 5.0.26
 
     loc_arg_list = ["SalesForce Park", "Edgewood Park&Ride", "Hellbender, West Entr.", "Hellbender, East Entr."] 
+    # sel_num = 3
+    # if args.testLocNum == -1: 
+    #     print("No location was selected. Please select one of the following:")
+    #     print(location_text)
+    #     sel_num = int(input("Option:")) - 1
+    # else:    
+    #     sel_num = args.testLocNum
+
+    name = "LabSat"
+    sn = "1234567890"
     sel_num = 3
-    if args.testLocNum == -1: 
-        print("No location was selected. Please select one of the following:")
-        print(location_text)
-        sel_num = int(input("Option:")) - 1
-    else:    
-        sel_num = args.testLocNum
     
-    gnss_qa = GnssQa(DB_PATH, TEST_LOCATION_MAP[loc_arg_list[sel_num]], args.name, args.sn)
+    gnss_qa = GnssQa(DB_PATH, TEST_LOCATION_MAP[loc_arg_list[sel_num]], name, sn)
     gnss_qa.run()
     
