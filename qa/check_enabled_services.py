@@ -2,10 +2,22 @@
 import time
 import subprocess
 
+
 def reenable_and_test_LTE():
-  subprocess.run(["systemctl", "enable", "lte"])
-  time.sleep(3)
-  subprocess.run(["minicom", "-D", "/dev/ttyUSB2", "-S", "check_lte_script.txt", "-C", "lte_capture.txt"])
+    """Stops ODC-API, starts the LTE service, and then checks that the modem is responsive"""
+
+    subprocess.run(["systemctl", "stop", "odc-api"])
+    time.sleep(2)
+    subprocess.run(["systemctl", "enable", "lte"])
+    time.sleep(3)
+    subprocess.run(["minicom", 
+                    "-D", 
+                    "/dev/ttyUSB2", 
+                    "-S", 
+                    "check_lte_script.txt", 
+                    "-C", 
+                    "lte_capture.txt",])
+
 
 def get_enabled_services():
     """Gets a list of enabled systemctl services."""
@@ -22,6 +34,7 @@ def get_enabled_services():
         return services
     else:
         raise Exception(f"Error running systemctl: {result.stderr}")
+
 
 def check_enabled_services():
     """Checks if the required services are enabled."""
