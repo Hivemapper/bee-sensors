@@ -18,6 +18,7 @@ def main():
 
     # database path
     DB_PATH = "/home/<PATH TO DATABASE FILE>/redis_handler-v0-0-3.db"
+
     logs, metrics = parse_database(DB_PATH)
 
     plot_imu_values(logs["imu"])
