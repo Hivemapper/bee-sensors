@@ -2,6 +2,8 @@
 
 """
 
+import os
+import json
 import time
 import textwrap
 import sqlite3
@@ -18,12 +20,37 @@ TEST_LOCATION_MAP = {"SalesForce Park"       : (37.787976671122664, -122.3983670
                      "Hellbender, East Entr.": (40.54584991471907 ,  -79.82566018301341, 260. ), #PGH, PA
                     }
 
+# TODO: Find all instances of this and move to separate file/library to be imported.
+def geq(ver1, ver2):
+    """ Returns true if ver1 >= ver2"""
+    x1,y1,z1 = ver1.split(".")
+    x2,y2,z2 = ver2.split(".")
+    
+    if int(x1) > int(x2):
+        return True
+    if int(x1) < int(x2):
+        return False
+    if int(y1) > int(y2):
+        return True
+    if int(y1) < int(y2):
+        return False
+    if int(z1) > int(z2):
+        return True
+    if int(z1) < int(z2):
+        return False    
+    return True
+
+def less_than(ver1, ver2):
+    """ Returns true if ver1 < ver2"""
+    return not geq(ver1, ver2)
+
 class GnssQa():
-    def __init__(self, db_path, test_location, name="", sn=""):
+    def __init__(self, db_path, test_location, name="", sn="", firmware_version=None):
         self.database_path = db_path
         self.test_location = test_location
         self.name = name
         self.sn = sn
+        self.firmware_version = firmware_version
 
         self.nav_pvt_columns = ["id", "system_time", "session",
                                 "fully_resolved","gnss_fix_ok",
@@ -91,11 +118,17 @@ class GnssQa():
                 if self._fix_acquired():
                     self._add_ttff()
 
+                    if self.state == 0:
+                        self.state += 1
                     if self.state == 2:
                         self._cold_reboot()
+                        self.state += 1
                     if self.state == 3:
                         self.check_ttff = self._check_ttff()
-                    self.state += 1
+                        if less_than(self.firmware_version, "5.1.16"):
+                            self.state += 1
+                        else:
+                            self.state += 2
 
             elif self.state == 1:
                 if self.first_fix_count is None:
@@ -418,7 +451,6 @@ class GnssQa():
         p = multiprocessing.Process(target=self._run_script, args=(gpsd_kill_script,))
         p.start()
 
-
         # restart hivemapper-data-logger
         print("restarting data-logger")
         logger_script = "/data/qa_gnss/logger_command.sh"
@@ -427,7 +459,7 @@ class GnssQa():
         time.sleep(10)
 
     def _write_results(self):
-        """Write results to txt file /data/qa_gnss_results.txt
+        """Write results to txt file /data/qa_gnss_results.log
         
         self.check_sats_seen = False
         self.check_sats_used = False
@@ -445,7 +477,7 @@ class GnssQa():
             filename += "_"+self.name
         if self.sn != "":
             filename += "_"+self.sn
-        filename += ".txt"
+        filename += ".log"
 
         with open(filename, "w") as f:
             if self.check_sats_seen:
@@ -477,11 +509,11 @@ class GnssQa():
                 f.write("[PASS] TTFF values less than 90s\n")
             else:
                 f.write("[FAIL] TTFF values greater than 90s\n")
-
-            if self.check_fsync_connection:
-                f.write("[PASS] IMU/GNSS FSYNC connection verified\n")
-            else:
-                f.write("[FAIL] IMU/GNSS FSYNC connection not verified\n")
+            if less_than(self.firmware_version, "5.1.16"):
+                if self.check_fsync_connection:
+                    f.write("[PASS] IMU/GNSS FSYNC connection verified\n")
+                else:
+                    f.write("[FAIL] IMU/GNSS FSYNC connection not verified\n")
 
             f.write("TTFF values: ")
             f.write(str(self.ttff))
@@ -492,9 +524,10 @@ class GnssQa():
             f.write("Avg position error [m]: ")
             f.write(str(self.avg_error))
             f.write("\n")
-            f.write("FSYNC wait counts: ")
-            f.write(str(self.fsync_waits))
-            f.write("\n")
+            if less_than(self.firmware_version, "5.1.16"):
+                f.write("FSYNC wait counts: ")
+                f.write(str(self.fsync_waits))
+                f.write("\n")
 
     def _get_latest_values(self, table_name, columns, order_by_column = "id"):
         """
@@ -557,10 +590,23 @@ if __name__ == "__main__":
     parser.add_argument("--testLocNum", type=int, default=-1, help="Test location #. See below.")
     args = parser.parse_args()
 
-    # database path
-    DB_PATH = "/data/redis_handler/redis_handler-v0-0-3.db" # <= firmware 5.0.19
-    # DB_PATH = "/data/recording/redis_handler/redis_handler-v0-0-3.db" #  5.0.20 >= firmware < 5.026
-    # DB_PATH = "/data/recording/data-logger.v2.0.0.db" # > 5.0.26
+    # read version from /etc/build_info.json variable
+    with open("/etc/build_info.json") as file:
+        build_info = json.load(file)
+    firmware_version = build_info["odc-version"]
+
+    # Choose the appropriate database path based on the firmware version
+    DB_PATH = None
+    if geq(firmware_version, "5.0.19") and less_than(firmware_version, "5.0.26"):
+        DB_PATH = "/data/redis_handler/redis_handler-v0-0-3.db"
+    elif geq(firmware_version, "5.0.26") and less_than(firmware_version, "5.1.4"):
+        DB_PATH = "/data/recording/redis_handler/redis_handler-v0-0-3.db"
+    elif geq(firmware_version, "5.1.4"):
+        directory_path = "/data/recording/redis_handler/"
+        DB_PATH = next((os.path.join(directory_path,x) for x in os.listdir(directory_path) if x.endswith(".db") and "sensors" in x), None)
+
+    if DB_PATH is None:
+        raise Exception("Could not determine the database path for the current firmware version.")
 
     loc_arg_list = ["SalesForce Park", "Edgewood Park&Ride", "Hellbender, West Entr.", "Hellbender, East Entr."] 
     sel_num = 3
@@ -571,6 +617,6 @@ if __name__ == "__main__":
     else:    
         sel_num = args.testLocNum
     
-    gnss_qa = GnssQa(DB_PATH, TEST_LOCATION_MAP[loc_arg_list[sel_num]], args.name, args.sn)
+    gnss_qa = GnssQa(DB_PATH, TEST_LOCATION_MAP[loc_arg_list[sel_num]], args.name, args.sn, firmware_version)
     gnss_qa.run()
     
