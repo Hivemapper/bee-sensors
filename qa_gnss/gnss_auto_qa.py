@@ -20,6 +20,7 @@ TEST_LOCATION_MAP = {"SalesForce Park"       : (37.787976671122664, -122.3983670
                      "Hellbender, East Entr.": (40.54584991471907 ,  -79.82566018301341, 260. ), #PGH, PA
                     }
 
+# TODO: Find all instances of this and move to separate file/library to be imported.
 def geq(ver1, ver2):
     """ Returns true if ver1 >= ver2"""
     x1,y1,z1 = ver1.split(".")
