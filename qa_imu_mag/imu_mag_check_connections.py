@@ -239,18 +239,23 @@ if __name__ == "__main__":
         build_info = json.load(file)
     firmware_version = build_info["odc-version"]
 
+    
+    # Move this up top
+    from pathlib import Path
+    
     # Choose the appropriate database path based on the firmware version
     database_path = None
     if geq(firmware_version, "5.0.19") and less_than(firmware_version, "5.0.26"):
-        database_path = "/data/redis_handler/redis_handler-v0-0-3.db"
+        database_path = Path("/data/redis_handler/redis_handler-v0-0-3.db")
     elif geq(firmware_version, "5.0.26") and less_than(firmware_version, "5.1.4"):
-        database_path = "/data/recording/redis_handler/redis_handler-v0-0-3.db"
+        database_path = Path("/data/recording/redis_handler/redis_handler-v0-0-3.db")
     elif geq(firmware_version, "5.1.4"):
-        directory_path = "/data/recording/redis_handler/"
-        database_path = next((os.path.join(directory_path,x) for x in os.listdir(directory_path) if x.endswith(".db") and "sensors" in x), None)
+        directory_path = Path("/data/recording/redis_handler/")
+        database_path = next(directory_path.glob("*sensors*.db"), None)
 
     if database_path is None:
         raise Exception("Could not determine the database path for the current firmware version.")
-
-    qa = ImuMagQa(database_path, args.name, args.sn)
+    # FileIO will do the correct thing if passed a Path, but assuming sqlite3.connect requires a str
+    # use the str wrapper below.
+    qa = ImuMagQa(str(database_path), args.name, args.sn)
     qa.run()
