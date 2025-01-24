@@ -1,4 +1,6 @@
+import os
 import time
+import json
 import sqlite3
 
 def get_latest_values(database_path, table_name, columns, order_by_column):
@@ -45,11 +47,46 @@ def get_latest_values(database_path, table_name, columns, order_by_column):
         if conn:
             conn.close()
 
-# database_path = "/data/recording/data-logger.v2.0.0.db" # Path to SQLite database file
-database_path = "/data/redis_handler/redis_handler-v0-0-3.db" #  5.0.19 <= firmware < 5.0.26
-# database_path = "/data/recording/redis_handler/redis_handler-v0-0-3.db" #  5.026 <= firmware < 5.1.4
-# database_path = "/data/recording/redis_handler/sensors-v0-0-1.db" #  5.1.4 <= firmware < 5.1.9
-# database_path = "/data/recording/redis_handler/sensors-v0-0-2.db" #  5.1.10 <= firmware
+def geq(ver1, ver2):
+    """ Returns true if ver1 >= ver2"""
+    x1,y1,z1 = ver1.split(".")
+    x2,y2,z2 = ver2.split(".")
+    
+    if int(x1) > int(x2):
+        return True
+    if int(x1) < int(x2):
+        return False
+    if int(y1) > int(y2):
+        return True
+    if int(y1) < int(y2):
+        return False
+    if int(z1) > int(z2):
+        return True
+    if int(z1) < int(z2):
+        return False    
+    return True
+
+def less_than(ver1, ver2):
+    """ Returns true if ver1 < ver2"""
+    return not geq(ver1, ver2)
+
+# read version from /etc/build_info.json variable
+with open("/etc/build_info.json") as file:
+    build_info = json.load(file)
+firmware_version = build_info["odc-version"]
+
+# Choose the appropriate database path based on the firmware version
+database_path = None
+if geq(firmware_version, "5.0.19") and less_than(firmware_version, "5.0.26"):
+    database_path = "/data/redis_handler/redis_handler-v0-0-3.db"
+elif geq(firmware_version, "5.0.26") and less_than(firmware_version, "5.1.4"):
+    database_path = "/data/recording/redis_handler/redis_handler-v0-0-3.db"
+elif geq(firmware_version, "5.1.4"):
+    directory_path = "/data/recording/redis_handler/"
+    database_path = next((os.path.join(directory_path,x) for x in os.listdir(directory_path) if x.endswith(".db") and "sensors" in x), None)
+
+if database_path is None:
+    raise Exception("Could not determine the database path for the current firmware version.")
 
 nav_pvt_columns = ["id", "system_time", "session",
                         "fully_resolved","gnss_fix_ok","num_sv",
