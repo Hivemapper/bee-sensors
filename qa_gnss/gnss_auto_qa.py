@@ -117,6 +117,8 @@ class GnssQa():
                 if self._fix_acquired():
                     self._add_ttff()
 
+                    if self.state == 0:
+                        self.state += 1
                     if self.state == 2:
                         self._cold_reboot()
                         self.state += 1
