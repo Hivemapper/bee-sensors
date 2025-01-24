@@ -9,6 +9,7 @@ __date__ = "24 Oct 2024"
 import os
 import subprocess
 
+import json
 import sqlite3
 import numpy as np
 import pandas as pd
@@ -16,10 +17,25 @@ import matplotlib.pyplot as plt
 
 def main():
 
-    # database path
-    DB_PATH = "/home/<PATH TO DATABASE FILE>/redis_handler-v0-0-3.db"
+    # read version from /etc/build_info.json variable
+    with open("/etc/build_info.json") as file:
+        build_info = json.load(file)
+    firmware_version = build_info["odc-version"]
 
-    logs, metrics = parse_database(DB_PATH)
+    # Choose the appropriate database path based on the firmware version
+    database_path = None
+    if geq(firmware_version, "5.0.19") and less_than(firmware_version, "5.0.26"):
+        database_path = "/data/redis_handler/redis_handler-v0-0-3.db"
+    elif geq(firmware_version, "5.0.26") and less_than(firmware_version, "5.1.4"):
+        database_path = "/data/recording/redis_handler/redis_handler-v0-0-3.db"
+    elif geq(firmware_version, "5.1.4"):
+        directory_path = "/data/recording/redis_handler/"
+        database_path = next((os.path.join(directory_path,x) for x in os.listdir(directory_path) if x.endswith(".db") and "sensors" in x), None)
+
+    if database_path is None:
+        raise Exception("Could not determine the database path for the current firmware version.")
+
+    logs, metrics = parse_database(database_path)
 
     plot_imu_values(logs["imu"])
     plot_magnetometer_values(logs["mag"])
@@ -28,6 +44,30 @@ def main():
     print_metrics(metrics)
 
     plt.show()
+
+def geq(ver1, ver2):
+    """ Returns true if ver1 >= ver2"""
+    x1,y1,z1 = ver1.split(".")
+    x2,y2,z2 = ver2.split(".")
+    
+    if int(x1) > int(x2):
+        return True
+    if int(x1) < int(x2):
+        return False
+    if int(y1) > int(y2):
+        return True
+    if int(y1) < int(y2):
+        return False
+    if int(z1) > int(z2):
+        return True
+    if int(z1) < int(z2):
+        return False    
+    return True
+
+def less_than(ver1, ver2):
+    """ Returns true if ver1 < ver2"""
+    return not geq(ver1, ver2)
+
 
 def parse_database(db_path):
     """Parse sqlite3 database file.

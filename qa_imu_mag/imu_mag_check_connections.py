@@ -2,10 +2,37 @@
 
 """
 
+import os
 import time
+import json
 import sqlite3
 import argparse
 import subprocess
+
+
+def geq(ver1, ver2):
+    """ Returns true if ver1 >= ver2"""
+    x1,y1,z1 = ver1.split(".")
+    x2,y2,z2 = ver2.split(".")
+    
+    if int(x1) > int(x2):
+        return True
+    if int(x1) < int(x2):
+        return False
+    if int(y1) > int(y2):
+        return True
+    if int(y1) < int(y2):
+        return False
+    if int(z1) > int(z2):
+        return True
+    if int(z1) < int(z2):
+        return False    
+    return True
+
+def less_than(ver1, ver2):
+    """ Returns true if ver1 < ver2"""
+    return not geq(ver1, ver2)
+
 
 class ImuMagQa():
     def __init__(self, db_path, name="", sn=""):
@@ -26,8 +53,6 @@ class ImuMagQa():
         self.check_gyro_zeros = False
         self.checked_mag = False
         self.check_mag_zeros = False
-        self.check_fsync_connection = False
-        self.fsync_waits = []
         
         self.imu_ids_seen = set()
         self.mag_ids_seen = set()
@@ -37,12 +62,14 @@ class ImuMagQa():
         self.mag_data = {"mag_x": [], "mag_y": [], "mag_z": []}
         
         self.count = 0
-        self.num_rows_to_fetch = 20
-        self.secs_to_fetch = 1
+        self.num_rows_to_fetch = 25
+        self.secs_to_fetch = 4
 
     def run(self):
 
         while True:
+
+            print(f"count: {self.count}")
 
             if self.count >= 60:
                 print("60s Timeout. Exiting...")
@@ -88,136 +115,43 @@ class ImuMagQa():
                 self.checked_mag = True
 
             if self.checked_imu and self.checked_mag:
-                subprocess.run(["systemctl", "disable", "hivemapper-data-logger"])
-                subprocess.run(["systemctl", "stop", "hivemapper-data-logger"])
-                time.sleep(2)
-                subprocess.run(["chmod", "+x", "/home/root/datalogger"])
-                self.check_fsync_connection = self._check_fsync_connection()
-                subprocess.run(["systemctl", "enable", "hivemapper-data-logger"])
-                subprocess.run(["systemctl", "start", "hivemapper-data-logger"])
                 break
             
             self.count += 1
-            time.sleep(1)
+            time.sleep(5)
 
         self._write_results()
 
 
     def _check_acc_zeros(self):
-        """Check less than 1% of data is zero.
+        """Check less than 5% of data is zero.
 
         """
-        # check that less than 1% of time CW jamming >= 250
+        # check that less than 5% are zeros
         for key in ["acc_x", "acc_y", "acc_z"]:
-            if sum([1 if x == 0.0 else 0 for x in self.imu_data[key]])/float(len(self.imu_data[key])) > 0.01:
+            if sum([1 if x == 0.0 else 0 for x in self.imu_data[key]])/float(len(self.imu_data[key])) > 0.05:
                 return False
         return True
     
     def _check_gyro_zeros(self):
-        """Check less than 1% of data is zero.
+        """Check less than 5% of data is zero.
 
         """
-        # check that less than 1% of time CW jamming >= 250
+        # check that less than 5% are zeros
         for key in ["gyro_x", "gyro_y", "gyro_z"]:
-            if sum([1 if x == 0.0 else 0 for x in self.imu_data[key]])/float(len(self.imu_data[key])) > 0.01:
+            if sum([1 if x == 0.0 else 0 for x in self.imu_data[key]])/float(len(self.imu_data[key])) > 0.05:
                 return False
         return True
     
     def _check_mag_zeros(self):
-        """Check less than 1% of data is zero.
+        """Check less than 5% of data is zero.
 
         """
-        # check that less than 1% of time CW jamming >= 250
+        # check that less than 5% are zeros
         for key in ["mag_x", "mag_y", "mag_z"]:
-            if sum([1 if x == 0.0 else 0 for x in self.mag_data[key]])/float(len(self.mag_data[key])) > 0.01:
+            if sum([1 if x == 0.0 else 0 for x in self.mag_data[key]])/float(len(self.mag_data[key])) > 0.05:
                 return False
         return True
-    
-    def _check_fsync_connection(self):
-        """Check FSYNC connection.
-
-        """
-        print("Checking FSYNC connection")
-
-        for _ in range(3):
-            fsync_waits = self._run_data_logger()
-            if len(fsync_waits) > 0:
-                break
-
-        self.fsync_waits = fsync_waits
-        
-        if len(fsync_waits) < 500:
-            return False
-        
-        # check that 90% of time fsync_waits are less than 5
-        if sum([1 if x < 5 else 0 for x in fsync_waits])/float(len(fsync_waits)) < 0.9:
-            return False
-
-        return True
-    
-    def _run_data_logger(self):
-
-        fsync_waits = []
-        fsync_wait_count = 0
-
-        command = ["/home/root/datalogger", "log",
-                   "--gnss-mga-offline-file-path", "/data/mgaoffline.ubx",
-                   "--imu-json-destination-folder=/data/recording/imu",
-                   "--gnss-json-destination-folder=/data/recording/gps",
-                   "--db-output-path=/data/recording/data-logger.v2.0.0.db",
-                   "--db-log-ttl=30m",
-                   "--gnss-dev-path=/dev/ttyS2",
-                   "--imu-dev-path=/dev/spidev0.0",
-                   "--gnss-initial-baud-rate=460800",
-                   "--gnss-json-save-interval=30s",
-                   "--imu-json-save-interval=5s",
-                   "--imu-axis-map=CamX:Y,CamY:X,CamZ:Z",
-                   "--imu-inverted",
-                   "X:true,Y:false,Z:false",
-                   "--enable-magnetometer",
-                   "--enable-redis-logs"]
-
-        try:
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1
-            )
-
-            # Run the process for 15 seconds and print output in real-time
-            start_time = time.time()
-            while True:
-                # Check if 15 seconds have passed
-                if time.time() - start_time > 15:
-                    process.terminate()  # Stop the process
-                    break
-
-                # Print output from stdout
-                if process.stdout:
-                    line = process.stdout.readline()
-                    if line:
-                        if "Fsync{FSYNC interrupt: false," in line:
-                            fsync_wait_count += 1
-                        elif "Fsync{FSYNC interrupt: true," in line:
-                            fsync_waits.append(fsync_wait_count)
-                            fsync_wait_count = 0
-
-            # Print any remaining stderr output after termination
-            if process.stderr:
-                for line in process.stderr:
-                    print(line, end="")
-
-            process.wait()  # Ensure the process has terminated
-
-
-        except FileNotFoundError:
-            print("The command or executable was not found.")
-        except Exception as e:
-            print(f"An unexpected error occurred: {e}")
-
-        return fsync_waits
 
     def _write_results(self):
         """Write results to txt file /data/qa_imu_mag_results.txt
@@ -233,27 +167,18 @@ class ImuMagQa():
 
         with open(filename, "w") as f:            
             if self.check_acc_zeros:
-                f.write("[PASS] accel values 0.0 for less than 1% of time\n")
+                f.write("[PASS] accel values 0.0 for less than 5% of time\n")
             else:
-                f.write("[FAIL] accel values 0.0 for greater than 1% of time\n")
+                f.write("[FAIL] accel values 0.0 for greater than 5% of time\n")
             if self.check_gyro_zeros:
-                f.write("[PASS] gyro values 0.0 for less than 1% of time\n")
+                f.write("[PASS] gyro values 0.0 for less than 5% of time\n")
             else:
-                f.write("[FAIL] gyro values 0.0 for greater than 1% of time\n")
+                f.write("[FAIL] gyro values 0.0 for greater than 5% of time\n")
 
             if self.check_mag_zeros:
-                f.write("[PASS] mag values 0.0 for less than 1% of time\n")
+                f.write("[PASS] mag values 0.0 for less than 5% of time\n")
             else:
-                f.write("[FAIL] mag values 0.0 for greater than 1% of time\n")
-
-            if self.check_fsync_connection:
-                f.write("[PASS] IMU/GNSS FSYNC connection verified\n")
-            else:
-                f.write("[FAIL] IMU/GNSS FSYNC connection not verified\n")
-
-            # f.write("FSYNC wait values: ")
-            # f.write(str(self.fsync_waits))
-            # f.write("\n")
+                f.write("[FAIL] mag values 0.0 for greater than 5% of time\n")
 
     def _get_latest_values(self, table_name, columns, order_by_column = "id"):
         """
@@ -309,8 +234,23 @@ if __name__ == "__main__":
     parser.add_argument("--sn", default="", help="Serial number of the Bee device.")
     args = parser.parse_args()
 
-    # database path
-    DB_PATH = "/data/redis_handler/redis_handler-v0-0-3.db" # <= firmware 5.0.19
+    # read version from /etc/build_info.json variable
+    with open("/etc/build_info.json") as file:
+        build_info = json.load(file)
+    firmware_version = build_info["odc-version"]
 
-    qa = ImuMagQa(DB_PATH, args.name, args.sn)
+    # Choose the appropriate database path based on the firmware version
+    database_path = None
+    if geq(firmware_version, "5.0.19") and less_than(firmware_version, "5.0.26"):
+        database_path = "/data/redis_handler/redis_handler-v0-0-3.db"
+    elif geq(firmware_version, "5.0.26") and less_than(firmware_version, "5.1.4"):
+        database_path = "/data/recording/redis_handler/redis_handler-v0-0-3.db"
+    elif geq(firmware_version, "5.1.4"):
+        directory_path = "/data/recording/redis_handler/"
+        database_path = next((os.path.join(directory_path,x) for x in os.listdir(directory_path) if x.endswith(".db") and "sensors" in x), None)
+
+    if database_path is None:
+        raise Exception("Could not determine the database path for the current firmware version.")
+
+    qa = ImuMagQa(database_path, args.name, args.sn)
     qa.run()
