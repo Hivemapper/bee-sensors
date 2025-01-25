@@ -3,21 +3,18 @@ import time
 import subprocess
 
 
-def reenable_and_test_LTE():
-    """Stops ODC-API, starts the LTE service, and then checks that the modem is responsive"""
-
+def test_LTE():
+    """Stops ODC-API, and LTE restarter. Clears the lte log. Checks that the modem is responsive"""
     subprocess.run(["systemctl", "stop", "odc-api"])
-    time.sleep(2)
-    subprocess.run(["systemctl", "enable", "lte"])
     time.sleep(3)
-    subprocess.run(["minicom", 
-                    "-D", 
-                    "/dev/ttyUSB2", 
-                    "-S", 
-                    "check_lte_script.txt", 
-                    "-C", 
-                    "lte_capture.txt",])
-
+    subprocess.run(["systemctl", "stop", "lte"])
+    time.sleep(2)
+    subprocess.run(["rm", "-f", "/data/recording/lte-status.log"])
+    time.sleep(1)
+    subprocess.run(["systemctl", "start", "lte"])
+    print("Waiting 10 seconds for initial LTE log write")
+    time.sleep(10)
+    subprocess.run(["cp", "/data/recording/lte-status.log", "/tmp/lte_capture.txt"])
 
 def get_enabled_services():
     """Gets a list of enabled systemctl services."""
@@ -58,8 +55,23 @@ def check_enabled_services():
         else:
             print(f"[PASS] Service {service} is enabled.")
 
+
+def lte_file_check():
+    file_len = 0
+    with open("/tmp/lte_capture.txt", "r") as lte_file:
+        contents = lte_file.read()
+        print(contents)
+        file_len = len(contents)
+        print(file_len)
+    if file_len < 75:
+        print("[FAIL] LTE didn't respond.")
+    else:
+        print("[PASS] LTE responsive.")
+
+
 if __name__ == "__main__":
-    print("Re-enabling and testing LTE:")
-    reenable_and_test_LTE()
     print("Checking all services:")
     check_enabled_services()
+    print("Re-enabling and testing LTE:")
+    test_LTE()
+    lte_file_check()
