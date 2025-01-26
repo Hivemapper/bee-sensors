@@ -14,6 +14,7 @@ def test_LTE():
     subprocess.run(["systemctl", "start", "lte"])
     print("Waiting 10 seconds for initial LTE log write")
     time.sleep(10)
+    subprocess.run(["sync"])
     subprocess.run(["cp", "/data/recording/lte-status.log", "/tmp/lte_capture.txt"])
 
 def get_enabled_services():
