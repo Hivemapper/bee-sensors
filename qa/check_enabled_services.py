@@ -1,3 +1,21 @@
+#!/usr/bin/python3
+#
+# check_enabled_services.py
+#
+# Check script for 
+# Get the modem type from assembly
+# Final system check before ready to push
+#
+# Copyright 2024, 2025 Hivemapper, Hellbender Inc
+# Some Rights Reserved, see README/LICENSE
+#
+# Changelog:
+# Author Email, Date,     , Comment
+# derek       , 2024-12-27, Created
+# niessl-HB   , 2025,01-23, Improve the LTE check
+#
+# Formatted with flake8 --indent-size 4 --max-line-length 119
+#
 
 import time
 import subprocess
@@ -58,21 +76,54 @@ def check_enabled_services():
 
 
 def lte_file_check():
-    file_len = 0
+    """Checks for OK responses from initial AT commands for modem config"""
+    command_set_check = ["'AT'",
+                         "'AT#USBCFG?'",
+                         "'AT+GMM'",
+                        ]
+    command_result_map = {}
+    contents = []
     with open("/tmp/lte_capture.txt", "r") as lte_file:
-        contents = lte_file.read()
-        print(contents)
-        file_len = len(contents)
-        print(file_len)
-    if file_len < 75:
-        print("[FAIL] LTE didn't respond.")
-    else:
-        print("[PASS] LTE responsive.")
+        contents = lte_file.readlines()
+    
+    # Go through the log, and verify responses were valid for each command
+    previous_command = ""
+    for line in contents:
+        if previous_command is not "":
+            print(line)
+            is_ok = ("\\r\\nOK\\r\\n" in line)
+            if previous_command not in command_result_map:
+                command_result_map[previous_command] = is_ok
+            else:
+                was_ok = command_result_map[previous_command]
+                command_result_map[previous_command] = is_ok and was_ok
+            previous_command = ""
+            continue
+        for at_command in command_set_check:
+            if at_command in line: 
+                previous_command = at_command
+                break
+    
+    # Confirm we got OK results for the minimum configuration commands
+    for command in command_set_check:
+        if command not in command_result_map:
+            print(f"{command} not found")
+            print("[FAIL] LTE command didn't respond")
+            return 
+        if not command_result_map[command]:
+            print(f"{command} didn't return OK")
+            print("[FAIL] LTE command didn't return OK")
+            return
+
+    print("[PASS] LTE responsive.")
 
 
-if __name__ == "__main__":
+def main():
     print("Checking all services:")
     check_enabled_services()
     print("Re-enabling and testing LTE:")
     test_LTE()
     lte_file_check()
+    
+if __name__ == "__main__":
+    main()
