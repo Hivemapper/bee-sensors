@@ -15,10 +15,13 @@ read sn
 
 scp -r -o StrictHostKeyChecking=no $dir_path/qa_gnss/ root@192.168.0.10:/data
 ssh -t -o StrictHostKeyChecking=no root@192.168.0.10 "python3 /data/qa_gnss/gnss_auto_qa.py --name \"$name\" --sn \"$sn\""
-ssh -t -o StrictHostKeyChecking=no root@192.168.0.10 "cat /data/qa_gnss_results_\"$name\"_\"$sn\".txt"
+ssh -t -o StrictHostKeyChecking=no root@192.168.0.10 "cat /data/qa_gnss_results_\"$name\"_\"$sn\".log"
+
+# First copy over the JSON file because it's not LOCAL!
+scp -r -o StrictHostKeyChecking=no root@192.168.0.10:/etc/build_info.json /usr/share/datalogs/current_cam_ver.json
 
 # Copy over files based on firmware version
-JSON_FILE="/etc/build_info.json"
+JSON_FILE="/usr/share/datalogs/current_cam_ver.json"
 VERSION=$(grep '"odc-version"' "$JSON_FILE" | sed -E 's/.*"odc-version"[[:space:]]*:[[:space:]]*"([0-9.]+)".*/\1/')
 if [ "$VERSION" == "$PREVIOUS_VERSION" ]; then
   echo "Running on previous version"
