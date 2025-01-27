@@ -1,9 +1,0 @@
-sleep 1
-send AT+GMM
-expect OK
-send AT+IMEISV
-expect OK
-send AT#HWREV
-expect OK
-sleep 1
-! killall -9 minicom

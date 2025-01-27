@@ -2,9 +2,7 @@
 #
 # check_enabled_services.py
 #
-# Check script for 
-# Get the modem type from assembly
-# Final system check before ready to push
+# Check script for modem and enabled services
 #
 # Copyright 2024, 2025 Hivemapper, Hellbender Inc
 # Some Rights Reserved, see README/LICENSE
@@ -12,7 +10,7 @@
 # Changelog:
 # Author Email, Date,     , Comment
 # derek       , 2024-12-27, Created
-# niessl-HB   , 2025,01-23, Improve the LTE check
+# niessl-HB   , 2025-01-23, Improve the LTE check
 #
 # Formatted with flake8 --indent-size 4 --max-line-length 119
 #
@@ -35,10 +33,11 @@ def test_LTE():
     subprocess.run(["sync"])
     subprocess.run(["cp", "/data/recording/lte-status.log", "/tmp/lte_capture.txt"])
 
+
 def get_enabled_services():
     """Gets a list of enabled systemctl services."""
 
-    result = subprocess.run(["systemctl", "list-unit-files", "--type=service", "--state=enabled"], 
+    result = subprocess.run(["systemctl", "list-unit-files", "--type=service", "--state=enabled"],
                             capture_output=True, text=True)
 
     if result.returncode == 0:
@@ -63,7 +62,7 @@ def check_enabled_services():
                          "map-ai",
                          "odc-api",
                          "redis",
-                         "redis-handler", 
+                         "redis-handler",
                          ]
 
     enabled_services = get_enabled_services()
@@ -79,18 +78,16 @@ def lte_file_check():
     """Checks for OK responses from initial AT commands for modem config"""
     command_set_check = ["'AT'",
                          "'AT#USBCFG?'",
-                         "'AT+GMM'",
-                        ]
+                         "'AT+GMM'"]
     command_result_map = {}
     contents = []
     with open("/tmp/lte_capture.txt", "r") as lte_file:
         contents = lte_file.readlines()
-    
+
     # Go through the log, and verify responses were valid for each command
     previous_command = ""
     for line in contents:
-        if previous_command is not "":
-            print(line)
+        if previous_command != "":
             is_ok = ("\\r\\nOK\\r\\n" in line)
             if previous_command not in command_result_map:
                 command_result_map[previous_command] = is_ok
@@ -100,16 +97,16 @@ def lte_file_check():
             previous_command = ""
             continue
         for at_command in command_set_check:
-            if at_command in line: 
+            if at_command in line:
                 previous_command = at_command
                 break
-    
+
     # Confirm we got OK results for the minimum configuration commands
     for command in command_set_check:
         if command not in command_result_map:
             print(f"{command} not found")
             print("[FAIL] LTE command didn't respond")
-            return 
+            return
         if not command_result_map[command]:
             print(f"{command} didn't return OK")
             print("[FAIL] LTE command didn't return OK")
@@ -124,6 +121,7 @@ def main():
     print("Re-enabling and testing LTE:")
     test_LTE()
     lte_file_check()
-    
+
+
 if __name__ == "__main__":
     main()
