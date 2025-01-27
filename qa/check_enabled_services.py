@@ -10,7 +10,7 @@
 # Changelog:
 # Author Email, Date,     , Comment
 # derek       , 2024-12-27, Created
-# niessl-HB   , 2025-01-23, Improve the LTE check
+# cniessl-HB  , 2025-01-23, Improve the LTE check
 #
 # Formatted with flake8 --indent-size 4 --max-line-length 119
 #
