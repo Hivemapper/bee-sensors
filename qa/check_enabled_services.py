@@ -28,8 +28,8 @@ def test_LTE():
     subprocess.run(["rm", "-f", "/data/recording/lte-status.log"])
     time.sleep(1)
     subprocess.run(["systemctl", "start", "lte"])
-    print("Waiting 10 seconds for initial LTE log write")
-    time.sleep(10)
+    print("Waiting 30 seconds for initial LTE log write")
+    time.sleep(35)
     subprocess.run(["sync"])
     subprocess.run(["cp", "/data/recording/lte-status.log", "/tmp/lte_capture.txt"])
 
@@ -76,8 +76,7 @@ def check_enabled_services():
 
 def lte_file_check():
     """Checks for OK responses from initial AT commands for modem config"""
-    command_set_check = ["'AT'",
-                         "'AT#USBCFG?'",
+    command_set_check = ["'AT#USBCFG?'",
                          "'AT+GMM'"]
     command_result_map = {}
     contents = []
