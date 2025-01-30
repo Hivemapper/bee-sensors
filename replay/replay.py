@@ -7,12 +7,14 @@ Setup:
 """
 
 import time
+import base64
 import sqlite3
 import argparse
 import subprocess
 
 import redis
 import pandas as pd
+from tqdm import tqdm
 
 import sensordata_pb2 as sensordata
 
@@ -92,19 +94,21 @@ class SensorReplay():
 
     def run_replay(self):
         """Runs the replay loop."""
+
+        pbar = tqdm(total=sum([len(self.sql_data[table]) for table in self.sql_data]))
         
         while True:
 
             # find the minimum timestamp
             valid_timestamps = {k: v for k, v in self.system_timestamps.items() if v is not None}
             if len(valid_timestamps) == 0:
-                print("No more data to replay.")
                 break
             min_key = min(valid_timestamps, key=valid_timestamps.get)
             
             # add the current min key to Redis
             serialized_data = self.serializers[min_key](self.sql_data[min_key].iloc[self.row_index[min_key]])
             self.push_to_redis(serialized_data, self.redis_table_to_list[min_key])
+            pbar.update(1)
             
             # if it's a navigation message, also add the other navigation messages
             if min_key == "nav_pvt":
@@ -113,6 +117,7 @@ class SensorReplay():
                     if len(data_row) > 0:
                         serialized_data = self.serializers[table](data_row.iloc[0])
                         self.push_to_redis(serialized_data, self.redis_table_to_list[table])
+                        pbar.update(1)
             
             # update to the next timestamp
             self.row_index[min_key] += 1
@@ -123,10 +128,52 @@ class SensorReplay():
 
     def serialize_gnss(self, row):
         message = sensordata.GnssData()
+        message.system_time = row.system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(row.system_time.microsecond).ljust(6, '0')
+        message.timestamp = row.time
+        message.fix = row.fix
+        message.ttff = row.ttff
+        message.latitude = row.latitude
+        message.longitude = row.longitude
+        message.altitude = row.altitude
+        message.speed = row.speed
+        message.heading = row.heading
+        message.satellites.seen = row.satellites_seen
+        message.satellites.used = row.satellites_used
+        message.eph = row.eph
+        message.horizontal_accuracy = row.horizontal_accuracy
+        message.vertical_accuracy = row.vertical_accuracy
+        message.heading_accuracy = row.heading_accuracy
+        message.speed_accuracy = row.speed_accuracy
+        message.dop.hdop = row.hdop
+        message.dop.vdop = row.vdop
+        message.dop.xdop = row.xdop
+        message.dop.ydop = row.ydop
+        message.dop.tdop = row.tdop
+        message.dop.pdop = row.pdop
+        message.dop.gdop = row.gdop
+        message.rf.jamming_state = row.rf_jamming_state
+        message.rf.ant_status = row.rf_ant_status
+        message.rf.ant_power = row.rf_ant_power
+        message.rf.post_status = row.rf_post_status
+        message.rf.noise_per_ms = row.rf_noise_per_ms
+        message.rf.agc_cnt = row.rf_agc_cnt
+        message.rf.jam_ind = row.rf_jam_ind
+        message.rf.ofs_i = row.rf_ofs_i
+        message.rf.mag_i = row.rf_mag_i
+        message.rf.ofs_q = row.rf_ofs_q
+        message.cno = row.cno
+        message.actual_system_time = row.actual_system_time
+        message.time_resolved = row.time_resolved
         return message.SerializeToString()
     
     def serialize_gnss_auth(self, row):
         message = sensordata.GnssData()
+        message.sec_ecsign_buffer = row.buffer
+        message.sec_ecsign.msg_num = row.buffer_message_num
+        message.sec_ecsign.session_id = base64.b64decode(row.gnss_session_id)
+        message.sec_ecsign.final_hash = base64.b64decode(row.buffer_hash)
+        message.sec_ecsign.ecdsa_signature = base64.b64decode(row.signature)
+        message.system_time = row.system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(row.system_time.microsecond).ljust(6, '0')
         return message.SerializeToString()
 
     def serialize_imu(self, row):
