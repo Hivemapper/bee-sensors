@@ -84,9 +84,10 @@ class SensorReplay():
             self.sql_data[table] = self.fetch_sqlite_table(table)
             self.row_index[table] = 0
             if table in self.system_time_columns:
-                self.sql_data[table][self.system_time_columns[table]] = pd.to_datetime(self.sql_data[table][self.system_time_columns[table]], format="mixed")
+                self.sql_data[table]["sync_time"] = pd.to_datetime(self.sql_data[table][self.system_time_columns[table]],
+                                                                                        format="%Y-%m-%d %H:%M:%S.%f")
                 if len(self.sql_data[table]) > 0:
-                    self.system_timestamps[table] = self.sql_data[table][self.system_time_columns[table]][0]
+                    self.system_timestamps[table] = self.sql_data[table]["sync_time"][0]
 
         self.start_redis_server()
 
@@ -123,17 +124,16 @@ class SensorReplay():
                 self.push_to_redis(self.serialize_nav_sat(nav_pvt_system_time, nav_pvt_itow_ms), "NavSat")
                 self.push_to_redis(self.serialize_mon_rf(nav_pvt_system_time), "MonRf")
                 
-            
             # update to the next timestamp
             self.row_index[min_key] += 1
             if self.row_index[min_key] >= len(self.sql_data[min_key]):
                 self.system_timestamps[min_key] = None
             else:
-                self.system_timestamps[min_key] = self.sql_data[min_key][self.system_time_columns[min_key]][self.row_index[min_key]]
+                self.system_timestamps[min_key] = self.sql_data[min_key]["sync_time"][self.row_index[min_key]]
 
     def serialize_gnss(self, row):
         message = sensordata.GnssData()
-        message.system_time = row.system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(row.system_time.microsecond).ljust(6, '0')
+        message.system_time = row.system_time
         message.timestamp = row.time
         message.fix = row.fix
         message.ttff = row.ttff
@@ -178,12 +178,12 @@ class SensorReplay():
         message.sec_ecsign.session_id = base64.b64decode(row.gnss_session_id)
         message.sec_ecsign.final_hash = base64.b64decode(row.buffer_hash)
         message.sec_ecsign.ecdsa_signature = base64.b64decode(row.signature)
-        message.system_time = row.system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(row.system_time.microsecond).ljust(6, '0')
+        message.system_time = row.system_time
         return message.SerializeToString()
 
     def serialize_imu(self, row):
         message = sensordata.ImuData()
-        message.time = row.time.strftime('%Y-%m-%d %H:%M:%S.') + str(row.time.microsecond).ljust(6, '0')
+        message.time = row.time
         message.accelerometer.x = row.acc_x
         message.accelerometer.y = row.acc_y
         message.accelerometer.z = row.acc_z
@@ -195,7 +195,7 @@ class SensorReplay():
     
     def serialize_mag(self, row):
         message = sensordata.MagnetometerData()
-        message.system_time = row.system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(row.system_time.microsecond).ljust(6, '0')
+        message.system_time = row.system_time
         message.x = row.mag_x
         message.y = row.mag_y
         message.z = row.mag_z
@@ -224,34 +224,34 @@ class SensorReplay():
     def serialize_nav_posecef(self, row):
         message = sensordata.NavPosecef()
         message.itow_ms = row.itow_ms
-        message.ecef_x_cm = int(row.ecef_x * 100.)
-        message.ecef_y_cm = int(row.ecef_y * 100.)
-        message.ecef_z_cm = int(row.ecef_z * 100.)
-        message.p_acc_cm = int(row.p_acc * 100.)
+        message.ecef_x_cm = int(np.rint(row.ecef_x * 100.))
+        message.ecef_y_cm = int(np.rint(row.ecef_y * 100.))
+        message.ecef_z_cm = int(np.rint(row.ecef_z * 100.))
+        message.p_acc_cm = int(np.rint(row.p_acc * 100.))
         return message.SerializeToString()
     
     def serialize_nav_pvt(self, row):
         message = sensordata.NavPvt()
-        message.system_time = row.system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(row.system_time.microsecond).ljust(6, '0')
+        message.system_time = row.system_time
         message.itow_ms = row.itow_ms
         message.valid = (row.valid_date << 0) | (row.valid_time << 1) | (row.fully_resolved << 2) | (row.valid_mag << 3)
         message.fix_type = row.fix_type
         message.flags = (row.gnss_fix_ok << 0) | (row.diff_soln << 1) | (row.psm_state << 2) | (row.head_veh_valid << 5) | (row.carr_soln << 6)
         message.num_sv = row.num_sv
-        message.lon_dege7 = int(row.lon_deg * 1e7)
-        message.lat_dege7 = int(row.lat_deg * 1e7)
-        message.height_mm = int(row.height_m * 1000)
-        message.hmsl_mm = int(row.hmsl_m * 1000)
-        message.h_acc_mm = int(row.h_acc_m * 1000)
-        message.v_acc_mm = int(row.v_acc_m * 1000)
-        message.vel_n_mm_s = int(row.vel_n_m_s * 1000)
-        message.vel_e_mm_s = int(row.vel_e_m_s * 1000)
-        message.vel_d_mm_s = int(row.vel_d_m_s * 1000)
-        message.g_speed_mm_s = int(row.g_speed_m_s * 1000)
-        message.head_mot_dege5 = int(row.head_mot_deg * 1e5)
-        message.s_acc_mm_s = int(row.s_acc_m_s * 1000)
-        message.head_acc_dege5 = int(row.head_acc_deg * 1e5)
-        message.pdop = int(row.pdop * 100)
+        message.lon_dege7 = int(np.rint(row.lon_deg * 1e7))
+        message.lat_dege7 = int(np.rint(row.lat_deg * 1e7))
+        message.height_mm = int(np.rint(row.height_m * 1000))
+        message.hmsl_mm = int(np.rint(row.hmsl_m * 1000))
+        message.h_acc_mm = int(np.rint(row.h_acc_m * 1000))
+        message.v_acc_mm = int(np.rint(row.v_acc_m * 1000))
+        message.vel_n_mm_s = int(np.rint(row.vel_n_m_s * 1000))
+        message.vel_e_mm_s = int(np.rint(row.vel_e_m_s * 1000))
+        message.vel_d_mm_s = int(np.rint(row.vel_d_m_s * 1000))
+        message.g_speed_mm_s = int(np.rint(row.g_speed_m_s * 1000))
+        message.head_mot_dege5 = int(np.rint(row.head_mot_deg * 1e5))
+        message.s_acc_mm_s = int(np.rint(row.s_acc_m_s * 1000))
+        message.head_acc_dege5 = int(np.rint(row.head_acc_deg * 1e5))
+        message.pdop = int(np.rint(row.pdop * 100))
         message.flags3 = (row.invalid_llh << 0) | (row.last_correction_age << 1) | (row.auth_time << 13) | (row.nma_fix_status << 14)
         return message.SerializeToString()
     
@@ -279,27 +279,27 @@ class SensorReplay():
     def serialize_nav_velecef(self, row):
         message = sensordata.NavVelecef()
         message.itow_ms = row.itow_ms
-        message.ecef_vx_cm_s = int(row.ecef_vx * 100.)
-        message.ecef_vy_cm_s = int(row.ecef_vy * 100.)
-        message.ecef_vz_cm_s = int(row.ecef_vz * 100.)
-        message.s_acc_cm_s = int(row.s_acc * 100.)
+        message.ecef_vx_cm_s = int(np.rint(row.ecef_vx * 100.))
+        message.ecef_vy_cm_s = int(np.rint(row.ecef_vy * 100.))
+        message.ecef_vz_cm_s = int(np.rint(row.ecef_vz * 100.))
+        message.s_acc_cm_s = int(np.rint(row.s_acc * 100.))
         return message.SerializeToString()
     
     def serialize_nav_dop(self, nav_pvt_system_time, nav_pvt_itow_ms):
         message = sensordata.NavDop()
-        message.system_time = nav_pvt_system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(nav_pvt_system_time.microsecond).ljust(6, '0')
+        message.system_time = nav_pvt_system_time
         message.itow_ms = nav_pvt_itow_ms
         return message.SerializeToString()
     
     def serialize_nav_sat(self, nav_pvt_system_time, nav_pvt_itow_ms):
         message = sensordata.NavSat()
-        message.system_time = nav_pvt_system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(nav_pvt_system_time.microsecond).ljust(6, '0')
+        message.system_time = nav_pvt_system_time
         message.itow_ms = nav_pvt_itow_ms
         return message.SerializeToString()
     
     def serialize_mon_rf(self, nav_pvt_system_time):
         message = sensordata.MonRf()
-        message.system_time = nav_pvt_system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(nav_pvt_system_time.microsecond).ljust(6, '0')
+        message.system_time = nav_pvt_system_time
         return message.SerializeToString()
 
     def push_to_redis(self, serialized_data, list_name):
