@@ -13,6 +13,7 @@ import argparse
 import subprocess
 
 import redis
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -66,9 +67,6 @@ class SensorReplay():
                                 "nav_timegps" : self.serialize_nav_timegps,
                                 "nav_velecef" : self.serialize_nav_velecef,
                             }
-        
-
-        self.redis_unsaved_lists = ["NavDop","MonRf"]
 
         self.system_time_columns = {
                                 "gnss" : "system_time",
@@ -112,12 +110,19 @@ class SensorReplay():
             
             # if it's a navigation message, also add the other navigation messages
             if min_key == "nav_pvt":
+                nav_pvt_itow_ms = self.sql_data[min_key].iloc[self.row_index[min_key]]["itow_ms"]
+                nav_pvt_system_time = self.sql_data[min_key].iloc[self.row_index[min_key]]["system_time"]
+
                 for table in self.itow_ms_tables:
-                    data_row = self.sql_data[table].loc[self.sql_data[table]["itow_ms"] == self.sql_data[min_key].iloc[self.row_index[min_key]]["itow_ms"]]
+                    data_row = self.sql_data[table].loc[self.sql_data[table]["itow_ms"] == nav_pvt_itow_ms]
                     if len(data_row) > 0:
                         serialized_data = self.serializers[table](data_row.iloc[0])
                         self.push_to_redis(serialized_data, self.redis_table_to_list[table])
                         pbar.update(1)
+                self.push_to_redis(self.serialize_nav_dop(nav_pvt_system_time, nav_pvt_itow_ms), "NavDop")
+                self.push_to_redis(self.serialize_nav_sat(nav_pvt_system_time, nav_pvt_itow_ms), "NavSat")
+                self.push_to_redis(self.serialize_mon_rf(nav_pvt_system_time), "MonRf")
+                
             
             # update to the next timestamp
             self.row_index[min_key] += 1
@@ -198,26 +203,103 @@ class SensorReplay():
     
     def serialize_nav_cov(self, row):
         message = sensordata.NavCov()
+        message.itow_ms = row.itow_ms
+        message.version = row.version
+        message.pos_cov_valid = row.posCovValid
+        message.vel_cov_valid = row.velCovValid
+        message.pos_cov_n_n = row.pos_cov_n_n
+        message.pos_cov_n_e = row.pos_cov_n_e
+        message.pos_cov_n_d = row.pos_cov_n_d
+        message.pos_cov_e_e = row.pos_cov_e_e
+        message.pos_cov_e_d = row.pos_cov_e_d
+        message.pos_cov_d_d = row.pos_cov_d_d
+        message.vel_cov_n_n = row.vel_cov_n_n
+        message.vel_cov_n_e = row.vel_cov_n_e
+        message.vel_cov_n_d = row.vel_cov_n_d
+        message.vel_cov_e_e = row.vel_cov_e_e
+        message.vel_cov_e_d = row.vel_cov_e_d
+        message.vel_cov_d_d = row.vel_cov_d_d
         return message.SerializeToString()
     
     def serialize_nav_posecef(self, row):
         message = sensordata.NavPosecef()
+        message.itow_ms = row.itow_ms
+        message.ecef_x_cm = int(row.ecef_x * 100.)
+        message.ecef_y_cm = int(row.ecef_y * 100.)
+        message.ecef_z_cm = int(row.ecef_z * 100.)
+        message.p_acc_cm = int(row.p_acc * 100.)
         return message.SerializeToString()
     
     def serialize_nav_pvt(self, row):
         message = sensordata.NavPvt()
+        message.system_time = row.system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(row.system_time.microsecond).ljust(6, '0')
+        message.itow_ms = row.itow_ms
+        message.valid = (row.valid_date << 0) | (row.valid_time << 1) | (row.fully_resolved << 2) | (row.valid_mag << 3)
+        message.fix_type = row.fix_type
+        message.flags = (row.gnss_fix_ok << 0) | (row.diff_soln << 1) | (row.psm_state << 2) | (row.head_veh_valid << 5) | (row.carr_soln << 6)
+        message.num_sv = row.num_sv
+        message.lon_dege7 = int(row.lon_deg * 1e7)
+        message.lat_dege7 = int(row.lat_deg * 1e7)
+        message.height_mm = int(row.height_m * 1000)
+        message.hmsl_mm = int(row.hmsl_m * 1000)
+        message.h_acc_mm = int(row.h_acc_m * 1000)
+        message.v_acc_mm = int(row.v_acc_m * 1000)
+        message.vel_n_mm_s = int(row.vel_n_m_s * 1000)
+        message.vel_e_mm_s = int(row.vel_e_m_s * 1000)
+        message.vel_d_mm_s = int(row.vel_d_m_s * 1000)
+        message.g_speed_mm_s = int(row.g_speed_m_s * 1000)
+        message.head_mot_dege5 = int(row.head_mot_deg * 1e5)
+        message.s_acc_mm_s = int(row.s_acc_m_s * 1000)
+        message.head_acc_dege5 = int(row.head_acc_deg * 1e5)
+        message.pdop = int(row.pdop * 100)
+        message.flags3 = (row.invalid_llh << 0) | (row.last_correction_age << 1) | (row.auth_time << 13) | (row.nma_fix_status << 14)
         return message.SerializeToString()
     
     def serialize_nav_status(self, row):
         message = sensordata.NavStatus()
+        message.itow_ms = row.itow_ms
+        message.gps_fix = row.gps_fix
+        message.flags = (row.gps_fix_ok << 0) | (row.diff_soln << 1) | (row.wkn_set << 2) | (row.tow_set << 3)
+        message.fix_stat = (row.diff_corr << 0) | (row.carr_soln_valid << 1)
+        message.flags2 = (row.psm_state << 0) | (row.spoof_det_state << 3) | (row.carr_soln << 6)
+        message.ttff = row.ttff
+        message.msss = row.msss
         return message.SerializeToString()
     
     def serialize_nav_timegps(self, row):
         message = sensordata.NavTimegps()
+        message.itow_ms = row.itow_ms
+        message.ftow_ns = row.ftow_ns
+        message.week = row.week
+        message.leap_s = row.leap_s
+        message.valid = row.valid
+        message.t_acc_ns = np.uint32(row.t_acc_ns)
         return message.SerializeToString()
     
     def serialize_nav_velecef(self, row):
         message = sensordata.NavVelecef()
+        message.itow_ms = row.itow_ms
+        message.ecef_vx_cm_s = int(row.ecef_vx * 100.)
+        message.ecef_vy_cm_s = int(row.ecef_vy * 100.)
+        message.ecef_vz_cm_s = int(row.ecef_vz * 100.)
+        message.s_acc_cm_s = int(row.s_acc * 100.)
+        return message.SerializeToString()
+    
+    def serialize_nav_dop(self, nav_pvt_system_time, nav_pvt_itow_ms):
+        message = sensordata.NavDop()
+        message.system_time = nav_pvt_system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(nav_pvt_system_time.microsecond).ljust(6, '0')
+        message.itow_ms = nav_pvt_itow_ms
+        return message.SerializeToString()
+    
+    def serialize_nav_sat(self, nav_pvt_system_time, nav_pvt_itow_ms):
+        message = sensordata.NavSat()
+        message.system_time = nav_pvt_system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(nav_pvt_system_time.microsecond).ljust(6, '0')
+        message.itow_ms = nav_pvt_itow_ms
+        return message.SerializeToString()
+    
+    def serialize_mon_rf(self, nav_pvt_system_time):
+        message = sensordata.MonRf()
+        message.system_time = nav_pvt_system_time.strftime('%Y-%m-%d %H:%M:%S.') + str(nav_pvt_system_time.microsecond).ljust(6, '0')
         return message.SerializeToString()
 
     def push_to_redis(self, serialized_data, list_name):
