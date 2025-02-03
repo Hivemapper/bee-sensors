@@ -6,7 +6,6 @@ __authors__ = "D. Knowles"
 __date__ = "03 Feb 2024"
 
 import os
-import csv
 import argparse
 
 import numpy as np
