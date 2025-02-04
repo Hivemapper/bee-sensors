@@ -1,0 +1,308 @@
+syntax = "proto3";
+option go_package=".;sensordata";
+
+// NOTE: If you make changes to this file, you need to regenerate
+// the go code by running the following command: 
+//   protoc --go_out=./proto-out --go-grpc_out=require_unimplemented_servers=false:./proto-out --proto_path=./proto/hm -I=./proto/hm ./proto/hm/sensordata.proto
+
+message ImuData {
+    message AccelerometerData {
+        double x = 1;
+        double y = 2;
+        double z = 3;
+    }
+    message GyroscopeData {
+        double x = 1;
+        double y = 2;
+        double z = 3;
+    }
+
+    string system_time = 1;
+    AccelerometerData accelerometer = 2;
+    GyroscopeData gyroscope = 3;
+    double temperature = 4;
+    string time = 5; // is this needed?
+}
+
+message MagnetometerData {
+    string system_time = 1;
+    double x = 2;
+    double y = 3;
+    double z = 4;
+}
+
+message GnssData {
+    message Dop {
+        double gdop = 1;
+        double hdop = 2;
+        double pdop = 3;
+        double tdop = 4;
+        double vdop = 5;
+        double xdop = 6;
+        double ydop = 7;
+    }
+
+    message Satellites {
+        int64 seen = 1;
+        int64 used = 2;
+    }
+
+    message RF {
+        string jamming_state = 1;
+        string ant_status = 2;
+        string ant_power = 3;
+        uint32 post_status = 4;
+        uint32 noise_per_ms = 5;
+        uint32 agc_cnt = 6;
+        uint32 jam_ind = 7;
+        int32 ofs_i = 8;
+        int32 mag_i = 9;
+        int32 ofs_q = 10;
+        int32 mag_q = 11;
+    }
+
+    message RxmMeasxSVType {
+        int32 gnss_id = 1;
+        int32 sv_id = 2;
+        int32 c_no = 3;
+        int32 mpath_indic = 4;
+        int32 doppler_ms_m_s = 5;
+        int32 doppler_hz_hz = 6;
+        uint32 whole_chips = 7;
+        uint32 frac_chips = 8;
+        int32 code_phase_msl_21 = 9;
+        int32 int_code_phase_ms = 10;
+        int32 pseu_range_rms_err = 11;
+        bytes reserved5 = 12;
+    }
+
+    message RxmMeasx {
+        int32 version = 1;
+        bytes reserved1 = 2;
+        uint32 gps_tow_ms = 3;
+        uint32 glo_tow_ms = 4;
+        uint32 bds_tow_ms = 5;
+        bytes reserved2 = 6;
+        uint32 qzss_tow_ms = 7;
+        uint32 gps_tow_acc_msl4 = 8;
+        uint32 glo_tow_acc_msl4 = 9;
+        uint32 bds_tow_acc_msl4 = 10;
+        bytes reserved3 = 11;
+        uint32 qzss_tow_acc_msl4 = 12;
+        int32 num_sv = 13;
+        int32 flags = 14;
+        bytes reserved4 = 15;
+        repeated RxmMeasxSVType sv = 16;
+    }
+
+    message UbxSecEcsign {
+        uint32 version = 1;
+        bytes reserved0 = 2;
+        uint32 msg_num = 3;
+        bytes final_hash = 4;
+        bytes session_id = 5;
+        bytes ecdsa_signature = 6;
+    }
+
+    int64 ttff = 1;
+    string system_time = 2;
+    string actual_system_time = 3;
+    string timestamp = 4;
+    string fix = 5;
+    double latitude = 6;
+    double unfiltered_latitude = 7;
+    double longitude = 8;
+    double unfiltered_longitude = 9;
+    double altitude = 10;
+    double heading = 11;
+    double speed = 12;
+    Dop dop = 13;
+    Satellites satellites = 14;
+    double sep = 15;
+    double eph = 16;
+    RF rf = 17;
+    double speed_accuracy = 18;
+    double heading_accuracy = 19;
+    int32 time_resolved = 20;
+    double horizontal_accuracy = 21;
+    double vertical_accuracy = 22;
+    string gga = 23;
+    RxmMeasx rxm_measx = 24;
+    UbxSecEcsign sec_ecsign = 25;
+    string sec_ecsign_buffer = 26;
+    double cno = 27;
+}
+
+/// Low Level UBX Messages
+
+message NavDop {
+    string system_time = 1;
+    uint32 itow_ms = 2;
+    uint32 gdop = 3;
+    uint32 pdop = 4;
+    uint32 tdop = 5;
+    uint32 vdop = 6;
+    uint32 hdop = 7;
+    uint32 ndop = 8;
+    uint32 edop = 9;
+}
+
+message NavSat {
+    message Svs {
+        uint32 gnss_id = 1;
+        uint32 sv_id = 2;
+        uint32 cno_dbhz = 3;
+        int32 elev_deg = 4;
+        int32 azim_deg = 5;
+        int32 pr_res_me1 = 6;
+        uint32 flags = 7;
+    }
+
+    string system_time = 1;
+    uint32 itow_ms = 2;
+    uint32 version = 3;
+    uint32 num_svs = 4;
+    repeated Svs svs = 5;
+}
+
+message NavPvt {
+    string system_time = 1;
+    uint32 itow_ms = 2;
+    uint32 year_y = 3;
+    uint32 month_month = 4;
+    uint32 day_d = 5;
+    uint32 hour_h = 6;
+    uint32 min_min = 7;
+    uint32 sec_s = 8;
+    uint32 valid = 9;
+    uint32 t_acc_ns = 10;
+    uint32 nano_ns = 11;
+    uint32 fix_type = 12;
+    uint32 flags = 13;
+    uint32 flags2 = 14;
+    uint32 num_sv = 15;
+    int32 lon_dege7 = 16;
+    int32 lat_dege7 = 17;
+    int32 height_mm = 18;
+    int32 hmsl_mm = 19;
+    uint32 h_acc_mm = 20;
+    uint32 v_acc_mm = 21;
+    int32 vel_n_mm_s = 22;
+    int32 vel_e_mm_s = 23;
+    int32 vel_d_mm_s = 24;
+    int32 g_speed_mm_s = 25;
+    int32 head_mot_dege5 = 26;
+    uint32 s_acc_mm_s = 27;
+    int32 head_acc_dege5 = 28;
+    uint32 pdop = 29;
+    uint32 flags3 = 30;
+    int32 head_veh_dege5 = 31;
+    int32 mag_dec_dege2 = 32;
+    uint32 mag_acc_dege2 = 33;
+}
+
+message NavCov {
+    uint32 itow_ms = 1;
+    uint32 version = 2;
+    uint32 pos_cov_valid = 3;
+    uint32 vel_cov_valid = 4;
+    double pos_cov_n_n = 5;
+    double pos_cov_n_e = 6;
+    double pos_cov_n_d = 7;
+    double pos_cov_e_e = 8;
+    double pos_cov_e_d = 9;
+    double pos_cov_d_d = 10;
+    double vel_cov_n_n = 11;
+    double vel_cov_n_e = 12;
+    double vel_cov_n_d = 13;
+    double vel_cov_e_e = 14;
+    double vel_cov_e_d = 15;
+    double vel_cov_d_d = 16;
+}
+
+message NavPosecef {
+    uint32 itow_ms = 1;
+    int32 ecef_x_cm = 2;
+    int32 ecef_y_cm = 3;
+    int32 ecef_z_cm = 4;
+    uint32 p_acc_cm = 5;
+}
+
+message NavTimegps {
+    uint32 itow_ms = 1;
+    int32 ftow_ns = 2;
+    int32 week = 3;
+    int32 leap_s = 4;
+    uint32 valid = 5;
+    uint32 t_acc_ns = 6;
+}
+
+message NavVelecef {
+    uint32 itow_ms = 1;
+    int32 ecef_vx_cm_s = 2;
+    int32 ecef_vy_cm_s = 3;
+    int32 ecef_vz_cm_s = 4;
+    uint32 s_acc_cm_s = 5;
+}
+
+message NavStatus {
+    uint32 itow_ms = 1;
+    uint32 gps_fix = 2;
+    uint32 flags = 3;
+    uint32 fix_stat = 4;
+    uint32 flags2 = 5;
+    uint32 ttff = 6;
+    uint32 msss = 7;
+}
+
+message MonRf {
+    message RFBlock {
+        uint32 block_id = 1;
+        uint32 flags = 2;
+        uint32 ant_status = 3;
+        uint32 ant_power = 4;
+        uint32 post_status = 5;
+        uint32 noise_per_ms = 6;
+        uint32 agc_cnt = 7;
+        int32 jam_ind = 8;
+        int32 ofs_i = 9;
+        uint32 mag_i = 10;
+        int32 ofs_q = 11;
+        uint32 mag_q = 12;
+    }
+
+    string system_time = 1;
+    uint32 version = 2;
+    uint32 n_block = 3;
+    repeated RFBlock rf_blocks = 4;
+}
+
+message RxmMeasx {
+    message RxmMeasxSVType {
+        uint32 gnss_id = 1;
+        uint32 sv_id = 2;
+        uint32 c_no = 3;
+        uint32 mpath_indic = 4;
+        int32 doppler_ms_m_s = 5;
+        int32 doppler_hz_hz = 6;
+        uint32 whole_chips = 7;
+        uint32 frac_chips = 8;
+        uint32 code_phase_msl_21 = 9;
+        uint32 int_code_phase_ms = 10;
+        uint32 pseu_range_rms_err = 11;
+    }
+
+    string system_time = 1;
+    uint32 version = 2;
+    uint32 gps_tow_ms = 3;
+    uint32 glo_tow_ms = 4;
+    uint32 bds_tow_ms = 5;
+    uint32 qzss_tow_ms = 6;
+    uint32 gps_tow_acc_msl4 = 7;
+    uint32 glo_tow_acc_msl4 = 8;
+    uint32 bds_tow_acc_msl4 = 9;
+    uint32 qzss_tow_acc_msl4 = 10;
+    uint32 num_sv = 11;
+    uint32 flags = 12;
+    repeated RxmMeasxSVType sv = 13;
+}
