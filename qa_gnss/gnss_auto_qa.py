@@ -120,10 +120,10 @@ class GnssQa():
 
                     if self.state == 0:
                         self.state += 1
-                    if self.state == 2:
+                    elif self.state == 2:
                         self._cold_reboot()
                         self.state += 1
-                    if self.state == 3:
+                    elif self.state == 3:
                         self.check_ttff = self._check_ttff()
                         if less_than(self.firmware_version, "5.1.16"):
                             self.state += 1
