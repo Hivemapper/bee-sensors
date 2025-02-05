@@ -4,9 +4,14 @@ Setup:
 1. pip install redis pandas protobuf
 2. protoc --python_out=. sensordata.proto
 
+
+Only pushes data the is after the first nav-pvt system time.
+
 """
 
+import sys
 import time
+import signal
 import base64
 import sqlite3
 import argparse
@@ -29,6 +34,7 @@ def main():
     args = parser.parse_args()
 
     sr = SensorReplay(args.db_path)
+    signal.signal(signal.SIGINT, sr.handle_exit)
     sr.run_replay()
 
 class SensorReplay():
@@ -43,13 +49,13 @@ class SensorReplay():
 
         
         self.redis_table_to_list = {
+                                "nav_pvt" : "NavPvt", # must be first for sync time to work out
                                 "gnss" : "gnss_data",
                                 "gnss_auth" : "gnss_auth_data",
                                 "imu" : "imu_data",
                                 "magnetometer" : "magnetometer_data",
                                 "nav_cov" : "NavCov",
                                 "nav_posecef" : "NavPosecef",
-                                "nav_pvt" : "NavPvt",
                                 "nav_status" : "NavStatus",
                                 "nav_timegps" : "NavTimegps",
                                 "nav_velecef" : "NavVelecef",
@@ -80,12 +86,18 @@ class SensorReplay():
         self.sql_data = {}
         self.row_index = {}
         self.system_timestamps = {}
+        nav_pvt_start_time = None
         for table in self.redis_table_to_list:
             self.sql_data[table] = self.fetch_sqlite_table(table)
             self.row_index[table] = 0
             if table in self.system_time_columns:
                 self.sql_data[table]["sync_time"] = pd.to_datetime(self.sql_data[table][self.system_time_columns[table]],
                                                                                         format="%Y-%m-%d %H:%M:%S.%f")
+                if table == "nav_pvt":
+                    nav_pvt_start_time = self.sql_data[table]["sync_time"][0]
+                elif nav_pvt_start_time is not None:
+                    self.sql_data[table] = self.sql_data[table][self.sql_data[table]["sync_time"] >= nav_pvt_start_time]
+                    self.sql_data[table].reset_index(drop=True, inplace=True)
                 if len(self.sql_data[table]) > 0:
                     self.system_timestamps[table] = self.sql_data[table]["sync_time"][0]
 
@@ -130,6 +142,8 @@ class SensorReplay():
                 self.system_timestamps[min_key] = None
             else:
                 self.system_timestamps[min_key] = self.sql_data[min_key]["sync_time"][self.row_index[min_key]]
+
+        self.clear_redis()
 
     def serialize_gnss(self, row):
         message = sensordata.GnssData()
@@ -319,6 +333,18 @@ class SensorReplay():
         conn.close()
         return df
 
+    def clear_redis(self):
+        try:
+            # Connect to Redis on localhost
+            client = redis.Redis(host=self.redis_host, port=self.redis_port, db=0)
+            
+            # Flush all data from Redis
+            client.flushall()
+            print("All data cleared from Redis.")
+        except Exception as e:
+            print(f"Error: {e}")
+
+
     def start_redis_server(self):
         """Starts a Redis server as a subprocess."""
         try:
@@ -330,11 +356,18 @@ class SensorReplay():
             # Wait a bit to ensure the Redis server starts
             time.sleep(2)
 
+            self.clear_redis()
+
             print("Redis server started successfully.")
             return process
         except Exception as e:
             print(f"Failed to start Redis server: {e}")
             raise e
+
+    def handle_exit(self, signal, frame):
+        print("Clearing data on exit...")
+        self.clear_redis()
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
