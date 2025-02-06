@@ -31,14 +31,15 @@ def main():
     # get path to database from argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--db_path", type=str, default="sensors-v0-0-2.db", help="Path to the SQLite database file")
+    parser.add_argument("--session", type=str, default="", help="Session ID to replay")
     args = parser.parse_args()
 
-    sr = SensorReplay(args.db_path)
+    sr = SensorReplay(args.db_path, args.session)
     signal.signal(signal.SIGINT, sr.handle_exit)
     sr.run_replay()
 
 class SensorReplay():
-    def __init__(self, sensor_db_path):
+    def __init__(self, sensor_db_path, session = ""):
 
 
         # Redis configuration
@@ -46,6 +47,7 @@ class SensorReplay():
         self.redis_port = 6379
         self.redis_conf_file = "redis.conf"
         self.sensor_db_path = sensor_db_path
+        self.session = session
 
         
         self.redis_table_to_list = {
@@ -329,6 +331,12 @@ class SensorReplay():
         query = f"SELECT * FROM {table_name}"
 
         df = pd.read_sql_query(query, conn)
+
+        if self.session != "":
+            if table_name == "gnss_auth":
+                df = df[df["session_id"] == self.session]
+            else:
+                df = df[df["session"] == self.session]
 
         conn.close()
         return df
