@@ -105,6 +105,11 @@ class SensorReplay():
 
         self.start_redis_server()
 
+    def adjust_itow_ms(self, itow_ms):
+        
+        return itow_ms
+        # return int((itow_ms + 371345500) % 6.048E8)
+
     def run_replay(self):
         """Runs the replay loop."""
 
@@ -219,7 +224,7 @@ class SensorReplay():
     
     def serialize_nav_cov(self, row):
         message = sensordata.NavCov()
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.version = row.version
         message.pos_cov_valid = row.posCovValid
         message.vel_cov_valid = row.velCovValid
@@ -239,7 +244,7 @@ class SensorReplay():
     
     def serialize_nav_posecef(self, row):
         message = sensordata.NavPosecef()
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.ecef_x_cm = int(np.rint(row.ecef_x * 100.))
         message.ecef_y_cm = int(np.rint(row.ecef_y * 100.))
         message.ecef_z_cm = int(np.rint(row.ecef_z * 100.))
@@ -249,7 +254,7 @@ class SensorReplay():
     def serialize_nav_pvt(self, row):
         message = sensordata.NavPvt()
         message.system_time = row.system_time
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.valid = (row.valid_date << 0) | (row.valid_time << 1) | (row.fully_resolved << 2) | (row.valid_mag << 3)
         message.fix_type = row.fix_type
         message.flags = (row.gnss_fix_ok << 0) | (row.diff_soln << 1) | (row.psm_state << 2) | (row.head_veh_valid << 5) | (row.carr_soln << 6)
@@ -273,7 +278,7 @@ class SensorReplay():
     
     def serialize_nav_status(self, row):
         message = sensordata.NavStatus()
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.gps_fix = row.gps_fix
         message.flags = (row.gps_fix_ok << 0) | (row.diff_soln << 1) | (row.wkn_set << 2) | (row.tow_set << 3)
         message.fix_stat = (row.diff_corr << 0) | (row.carr_soln_valid << 1)
@@ -284,7 +289,7 @@ class SensorReplay():
     
     def serialize_nav_timegps(self, row):
         message = sensordata.NavTimegps()
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.ftow_ns = row.ftow_ns
         message.week = row.week
         message.leap_s = row.leap_s
@@ -294,7 +299,7 @@ class SensorReplay():
     
     def serialize_nav_velecef(self, row):
         message = sensordata.NavVelecef()
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.ecef_vx_cm_s = int(np.rint(row.ecef_vx * 100.))
         message.ecef_vy_cm_s = int(np.rint(row.ecef_vy * 100.))
         message.ecef_vz_cm_s = int(np.rint(row.ecef_vz * 100.))
@@ -304,13 +309,13 @@ class SensorReplay():
     def serialize_nav_dop(self, nav_pvt_system_time, nav_pvt_itow_ms):
         message = sensordata.NavDop()
         message.system_time = nav_pvt_system_time
-        message.itow_ms = nav_pvt_itow_ms
+        message.itow_ms = self.adjust_itow_ms(nav_pvt_itow_ms)
         return message.SerializeToString()
     
     def serialize_nav_sat(self, nav_pvt_system_time, nav_pvt_itow_ms):
         message = sensordata.NavSat()
         message.system_time = nav_pvt_system_time
-        message.itow_ms = nav_pvt_itow_ms
+        message.itow_ms = self.adjust_itow_ms(nav_pvt_itow_ms)
         return message.SerializeToString()
     
     def serialize_mon_rf(self, nav_pvt_system_time):
@@ -337,6 +342,8 @@ class SensorReplay():
                 df = df[df["session_id"] == self.session]
             else:
                 df = df[df["session"] == self.session]
+
+        df.reset_index(drop=True, inplace=True)
 
         conn.close()
         return df
