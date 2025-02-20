@@ -89,6 +89,7 @@ class SensorReplay():
         self.row_index = {}
         self.system_timestamps = {}
         nav_pvt_start_time = None
+        nav_pvt_start_itow_ms = None
         for table in self.redis_table_to_list:
             self.sql_data[table] = self.fetch_sqlite_table(table)
             self.row_index[table] = 0
@@ -97,11 +98,16 @@ class SensorReplay():
                                                                                         format="%Y-%m-%d %H:%M:%S.%f")
                 if table == "nav_pvt":
                     nav_pvt_start_time = self.sql_data[table]["sync_time"][0]
+                    nav_pvt_start_itow_ms = self.sql_data[table]["itow_ms"][0]
                 elif nav_pvt_start_time is not None:
                     self.sql_data[table] = self.sql_data[table][self.sql_data[table]["sync_time"] >= nav_pvt_start_time]
                     self.sql_data[table].reset_index(drop=True, inplace=True)
                 if len(self.sql_data[table]) > 0:
                     self.system_timestamps[table] = self.sql_data[table]["sync_time"][0]
+            else:
+                if nav_pvt_start_itow_ms is not None:
+                    self.sql_data[table] = self.sql_data[table][self.sql_data[table]["itow_ms"] >= nav_pvt_start_itow_ms]
+                    self.sql_data[table].reset_index(drop=True, inplace=True)
 
         self.start_redis_server()
 
@@ -316,6 +322,28 @@ class SensorReplay():
         message = sensordata.NavSat()
         message.system_time = nav_pvt_system_time
         message.itow_ms = self.adjust_itow_ms(nav_pvt_itow_ms)
+        message.version = 1
+        message.num_svs = 2  # Two satellites in the list
+
+        # Create the first dummy Svs entry
+        dummy_svs1 = message.svs.add()
+        dummy_svs1.gnss_id = 1         # Example GNSS system ID
+        dummy_svs1.sv_id = 10          # Example satellite ID
+        dummy_svs1.cno_dbhz = 45       # Carrier-to-noise ratio in dB-Hz
+        dummy_svs1.elev_deg = 30       # Elevation angle in degrees
+        dummy_svs1.azim_deg = 120      # Azimuth angle in degrees
+        dummy_svs1.pr_res_me1 = 5   # Pseudorange residual in meters * 0.1
+        dummy_svs1.flags = 0b111111    # Example flags
+
+        # Create the second dummy Svs entry
+        dummy_svs2 = message.svs.add()
+        dummy_svs2.gnss_id = 2         # Another GNSS system ID
+        dummy_svs2.sv_id = 25          # Another satellite ID
+        dummy_svs2.cno_dbhz = 50       # Carrier-to-noise ratio in dB-Hz
+        dummy_svs2.elev_deg = 45       # Elevation angle in degrees
+        dummy_svs2.azim_deg = 200      # Azimuth angle in degrees
+        dummy_svs2.pr_res_me1 = -31   # Pseudorange residual in meters * 0.1
+        dummy_svs2.flags = 0b111111    # Example flags
         return message.SerializeToString()
     
     def serialize_mon_rf(self, nav_pvt_system_time):
