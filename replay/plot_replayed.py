@@ -40,7 +40,7 @@ def compute_results():
     logs, _, _ = parse_database(comparisons)
 
 
-    plot_fusion_map(logs["fusion_filtered"],comparisons)
+    plot_fusion_map(logs,comparisons)
 
     # plot_states_with_covariance(logs["fusion_filtered"],comparisons)
 
@@ -83,6 +83,7 @@ def parse_database(date_dirs):
             "sensors_nav_posecef" : [],
             "sensors_imu" : [],
             "fusion_imu" : [],
+            "ai_thresholds" : [],
             }
     metrics = {
             "gnss" : {},
@@ -198,6 +199,15 @@ def parse_database(date_dirs):
             logs["sensors_imu"].append(None)
         conn.close()
 
+    thresholds_file = [x for x in os.listdir(os.path.join(DB_DIRECTORY_PATH,date_dir)) if ((x[-4:] == ".csv") and ("ai_thresholds_log" in x))]
+    if len(thresholds_file) > 0:
+        thresholds_file = thresholds_file[0]
+        thresholds_path = os.path.join(DB_DIRECTORY_PATH,date_dir,thresholds_file)
+        df = pd.read_csv(thresholds_path)
+        logs["ai_thresholds"].append(df)
+    else:
+        logs["ai_thresholds"].append(None)
+
     return logs, metrics, date_dirs
 
 def generate_ellipses(df, type="cov", num_points=100, sigma=3):
@@ -266,27 +276,41 @@ def generate_ellipses(df, type="cov", num_points=100, sigma=3):
     return lat_list, lon_list
 
 
-def plot_fusion_map(logger_drivepaths, comparisons):
+def plot_fusion_map(logs, comparisons):
     gnss_sessions = []
     cov_ellipses = []
     r_ellipses = []
     q_ellipses = []
-    for ii,logger_drivepath in enumerate(logger_drivepaths):
+    for ii,logger_drivepath in enumerate(logs["fusion_filtered"]):
         if logger_drivepath is None or len(logger_drivepath) == 0:
             continue
         
-        print("fusion map",logger_drivepath.shape)
+        if logs["fusion_gnss_concise"][ii] is not None:
+            df_temp = logs["fusion_gnss_concise"][ii][logs["fusion_gnss_concise"][ii]["latitude"] != 0.0]
+            if len(df_temp) > 0:
+                df_temp = df_temp[["latitude","longitude","heading"]]
+                gnss_concise_heading_lats, gnss_concise_heading_lons = get_heading_lines(df_temp["latitude"],
+                                                                                         df_temp["longitude"],
+                                                                                         df_temp["heading"])
+                temp = glp.NavData(pandas_df=df_temp)
+                temp.rename({"latitude":"lat_" + f"nav_pvt_{comparisons[ii]}" + "_deg",
+                            "longitude":"lon_" + f"nav_pvt_{comparisons[ii]}" + "_deg",
+                            }, inplace=True)
+                gnss_sessions.append(temp)
+
         df_temp = logger_drivepath[logger_drivepath["lat_deg"]!= 0.0]
-        df_temp = logger_drivepath[(logger_drivepaths[ii]["lat_deg"] >= 37.0) \
-                                & (logger_drivepaths[ii]["lat_deg"] <= 37.9) \
-                                & (logger_drivepaths[ii]["lon_deg"] >= -122.6) \
-                                & (logger_drivepaths[ii]["lon_deg"] <= -121.6)]
-        df_temp = df_temp[["lat_deg","lon_deg",
+        df_temp = logger_drivepath[(logger_drivepath["lat_deg"] >= 37.0) \
+                                 & (logger_drivepath["lat_deg"] <= 37.9) \
+                                 & (logger_drivepath["lon_deg"] >= -122.6) \
+                                 & (logger_drivepath["lon_deg"] <= -121.6)]
+        df_temp = df_temp[["lat_deg","lon_deg","course_deg",
                            "pos_cov_n_n","pos_cov_n_e","pos_cov_e_e",
                            "q_cov_n_n","q_cov_n_e","q_cov_e_e",
                             "r_cov_n_n","r_cov_n_e","r_cov_e_e",
                            ]]
-
+        filtered_heading_lats, filtered_heading_lons = get_heading_lines(df_temp["lat_deg"],
+                                                                         df_temp["lon_deg"],
+                                                                         df_temp["course_deg"])
         print(df_temp.shape)
         temp = glp.NavData(pandas_df=df_temp)
         if len(temp) == 0:
@@ -295,9 +319,8 @@ def plot_fusion_map(logger_drivepaths, comparisons):
         temp.rename({"lat_deg":f"lat_fusion_{comparisons[ii]}_deg",
                      "lon_deg":f"lon_fusion_{comparisons[ii]}_deg",
                     }, inplace=True)
-
         gnss_sessions.append(temp)
-
+        
         lat_ellipses, lon_ellipses = generate_ellipses(df_temp.iloc[::10], type="cov", sigma=2)
         cov_ellipses.append([lat_ellipses, lon_ellipses])
         lat_ellipses, lon_ellipses = generate_ellipses(df_temp.iloc[::10], type="R", sigma=2)
@@ -335,6 +358,24 @@ def plot_fusion_map(logger_drivepaths, comparisons):
                 ),  
             )
 
+        fig.add_trace(go.Scattermapbox(
+            lat=gnss_concise_heading_lats,
+            lon=gnss_concise_heading_lons,
+            mode="lines",
+            # line=dict(width=line_width),
+            name="GNSS concise heading lines"
+        ))
+
+        fig.add_trace(go.Scattermapbox(
+            lat=filtered_heading_lats,
+            lon=filtered_heading_lons,
+            mode="lines",
+            # line=dict(width=line_width),
+            name="Filtered heading lines"
+        ))
+
+
+
         fig.update_layout(
             autosize=False,
             width=1800,
@@ -356,15 +397,15 @@ def plot_states_with_covariance(filtered_loggers, comparisons):
             ax.fill_between(filtered_logger["time"],
                             filtered_logger[state[0]] - 2.*np.sqrt(filtered_logger[state[3]]),
                             filtered_logger[state[0]] + 2.*np.sqrt(filtered_logger[state[3]]),
-                            alpha=0.5, label="R 2-$\sigma$ Covariance")
+                            alpha=0.5, label="R 2-$\\sigma$ Covariance")
             ax.fill_between(filtered_logger["time"],
                             filtered_logger[state[0]] - 2.*np.sqrt(filtered_logger[state[1]]),
                             filtered_logger[state[0]] + 2.*np.sqrt(filtered_logger[state[1]]),
-                            alpha=0.5,label="P 2-$\sigma$ Covariance")#, color="C"+str(ss))
+                            alpha=0.5,label="P 2-$\\sigma$ Covariance")#, color="C"+str(ss))
             ax.fill_between(filtered_logger["time"],
                             filtered_logger[state[0]] - 2.*np.sqrt(filtered_logger[state[2]]),
                             filtered_logger[state[0]] + 2.*np.sqrt(filtered_logger[state[2]]),
-                            alpha=0.5, label="Q 2-$\sigma$ Covariance")
+                            alpha=0.5, label="Q 2-$\\sigma$ Covariance")
             ax.set_title(state[0])
             plt.legend()
         plt.suptitle(f"States with Covariance {comparisons[ii]}")
@@ -395,6 +436,12 @@ def plot_acc_gyro_values(logs, date_dirs):
   for ii,logger in enumerate(logs["sensors_imu"]):
     if logger is None:
       continue
+
+    if logs["ai_thresholds"][ii] is not None:
+        ai_thresholds_df = logs["ai_thresholds"][ii]
+        ai_thresholds_df["time"] = pd.to_datetime(ai_thresholds_df["timestamp"], format="mixed")
+    else:
+        ai_thresholds_df = None
 
     for session in logger["session"].unique():
       df_temp = logger[logger["session"]==session]
@@ -444,6 +491,11 @@ def plot_acc_gyro_values(logs, date_dirs):
                color='blue', linestyle='--', marker='None')
       plt.axhline(y=(np.sqrt(1 + HARSH_BRAKING_THRESHOLD**2)), color='red', linestyle='--', label='harsh braking threshold total')
       plt.axhline(y=(np.sqrt(1 + AGGRESSIVE_ACCEL_THRESHOLD**2)), color='blue', linestyle='--', label='sudden accel threshold total')
+      if ai_thresholds_df is not None:
+        plt.plot(ai_thresholds_df["time"], ai_thresholds_df["total_norm"], label="Logged filtered total")
+        plt.plot(ai_thresholds_df["time"], ai_thresholds_df["filtered_x"], label="Logged filtered x")
+        plt.plot(ai_thresholds_df["time"], HARSH_BRAKING_THRESHOLD + ai_thresholds_df["braking_threshold"], label="Logged braking threshold")
+        plt.plot(ai_thresholds_df["time"], ai_thresholds_df["accel_threshold"] - AGGRESSIVE_ACCEL_THRESHOLD, label="Logged ")
       plt.legend()
       plt.title(f"Harsh braking {date_dirs[ii]} {session}")
 
@@ -463,10 +515,12 @@ def plot_acc_gyro_values(logs, date_dirs):
       plt.plot(df_fusion["time"], df_fusion["acc_total"], label="filtered total")
       plt.plot(df_fusion["time"], df_fusion["steady_state"], label="steady state y",
                color='red', linestyle='--', marker='None')
-      plt.plot(df_fusion["time"], df_fusion["swerving_threshold"], label="swerving threshold y",
-               color='blue', linestyle='--', marker='None')
-      plt.plot(df_fusion["time"], df_fusion["end_swerving"], label="end swerving threshold y",
-               color='green', linestyle='--', marker='None')
+      plt.axhline(y=SWERVING_THRESHOLD, color='blue', linestyle='--', label='start swerving threshold')
+      plt.axhline(y=0.25*SWERVING_THRESHOLD, color='green', linestyle='--', label='end swerving threshold')
+
+      if ai_thresholds_df is not None:
+        plt.plot(ai_thresholds_df["time"], ai_thresholds_df["filtered_y"], label="Logged filtered y")
+        plt.plot(ai_thresholds_df["time"], np.abs(ai_thresholds_df["filtered_y"] - ai_thresholds_df["average_y"]), label="Logged y diff")
       plt.legend()
       plt.title(f"Swerving {date_dirs[ii]} {session}")
 
@@ -489,6 +543,40 @@ def plot_acc_gyro_values(logs, date_dirs):
       # df_temp["gyro_norm"] = np.sqrt(df_temp['gyro_x']**2 + df_temp['gyro_y']**2 + df_temp['gyro_z']**2)
       # df_temp.plot(x="time",y=["gyro_norm"])
       # plt.title(f"Gyro Magnitude {date_dirs[ii]} {session}")
+
+def get_heading_lines(latitudes, longitudes, headings, line_length_meters=1):
+    """
+    Generate lines representing headings at given latitudes and longitudes.
+
+    Parameters:
+        latitudes (list): List of latitudes.
+        longitudes (list): List of longitudes.
+        headings (list): List of headings in degrees.
+        line_length_meters (float): Length of the lines in meters.
+
+    Returns:
+        tuple: Two lists containing latitude and longitude coordinates for the lines.
+    """
+
+    # Convert heading to radians (Clockwise from North)
+    headings_rad = np.radians(np.array(headings))  # Convert to counterclockwise from East
+
+    # Convert meters to degrees
+    meters_to_lat = line_length_meters / 111320  # 1 degree latitude ≈ 111.32 km
+    meters_to_lon = lambda lat: line_length_meters / (111320 * np.cos(np.radians(lat)))
+
+    # Prepare lists for line coordinates with None separators
+    line_lats, line_lons = [], []
+
+    for lat, lon, heading in zip(latitudes, longitudes, headings_rad):
+        end_lat = lat + meters_to_lat * np.cos(heading)
+        end_lon = lon + meters_to_lon(lat) * np.sin(heading)
+
+        # Append start and end coordinates, then None for breaking the line segments
+        line_lats.extend([lat, end_lat, None])
+        line_lons.extend([lon, end_lon, None])
+
+    return line_lats, line_lons
 
 
 if __name__ == "__main__":
