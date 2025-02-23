@@ -20,7 +20,7 @@ JSON_FILE="/usr/share/datalogs/current_cam_ver.json"
 VERSION=$(grep '"odc-version"' "$JSON_FILE" | sed -E 's/.*"odc-version"[[:space:]]*:[[:space:]]*"([0-9.]+)".*/\1/')
 
 
-ssh -r -o StrictHostKeyChecking=no root@192.168.0.10 "mkdir -p /data/qa_gnss"
+ssh -t -o StrictHostKeyChecking=no root@192.168.0.10 "mkdir -p /data/qa_gnss"
 scp -r -o StrictHostKeyChecking=no $dir_path/qa_gnss/*.py root@192.168.0.10:/data/qa_gnss
 scp -r -o StrictHostKeyChecking=no $dir_path/qa_gnss/*.sh root@192.168.0.10:/data/qa_gnss
 
