@@ -126,18 +126,16 @@ class GnssQa():
                     elif self.state == 3:
                         self.check_ttff = self._check_ttff()
                         # Niessl 2025-02-23: In the original code, it looks like if the version 
-                        # is later than 5.1.16, then we skip FSYNC. If this is intended, then
-                        # uncomment the original code. 
-                        self.state += 1
-                        # Original per comment above
-                        '''
+                        # is later than 5.1.16, then we skip FSYNC. When trying the FSYNC with
+                        # later versions this stopped/froze the test. If this is correct, then
+                        # remove this comment.
                         if less_than(self.firmware_version, "5.1.16"):
                             print(f"Version is {self.firmware_version}, doing FSYNC")
                             self.state += 1
                         else:
                             print(f"Version is {self.firmware_version}, skipping FSYNC")
                             self.state += 2
-                        '''
+                        
             elif self.state == 1:
                 if self.first_fix_count is None:
                     self.first_fix_count = self.count
@@ -191,7 +189,8 @@ class GnssQa():
                 subprocess.run(["systemctl", "stop", "hivemapper-data-logger"])
                 print("hivemapper-data-logger presumably stopped")
                 time.sleep(10)
-                subprocess.run(["chmod", "+x", "/data/qa_gnss/datalogger"])
+                if less_than(self.firmware_version, "5.2.7"):
+                    subprocess.run(["chmod", "+x", "/data/qa_gnss/datalogger"])
                 self.check_fsync_connection = self._check_fsync_connection()
                 subprocess.run(["systemctl", "enable", "hivemapper-data-logger"])
                 subprocess.run(["systemctl", "start", "hivemapper-data-logger"])
