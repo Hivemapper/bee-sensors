@@ -364,7 +364,14 @@ class GnssQa():
         fsync_waits = []
         fsync_wait_count = 0
 
-        command = ["/data/qa_gnss/datalogger", "log",
+        # Niessl 2025-02-23: Version 5.2.7 and later logs FSYNC correctly.
+        # TODO: Change this earlier if any previous versions also support it.
+        datalogger_path = "/data/qa_gnss/datalogger"
+        if geq(self.firmware_version, "5.2.7"):
+            datalogger_path = "/opt/dashcam/bin/datalogger"
+        print(f"Using {datalogger_path}")
+
+        command = [datalogger_path, "log",
                    "--gnss-mga-offline-file-path=/data/mgaoffline.ubx",
                    "--imu-json-destination-folder=/data/recording/imu",
                    "--gnss-json-destination-folder=/data/recording/gps",
