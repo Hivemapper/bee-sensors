@@ -125,10 +125,6 @@ class GnssQa():
                         self.state += 1
                     elif self.state == 3:
                         self.check_ttff = self._check_ttff()
-                        # Niessl 2025-02-23: In the original code, it looks like if the version 
-                        # is later than 5.1.16, then we skip FSYNC. When trying the FSYNC with
-                        # later versions this stopped/froze the test. If this is correct, then
-                        # remove this comment.
                         if less_than(self.firmware_version, "5.1.16"):
                             print(f"Version is {self.firmware_version}, doing FSYNC")
                             self.state += 1
