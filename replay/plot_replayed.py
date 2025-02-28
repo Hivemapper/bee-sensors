@@ -277,11 +277,13 @@ def generate_ellipses(df, type="cov", num_points=100, sigma=3):
 
 
 def plot_fusion_map(logs, comparisons):
-    gnss_sessions = []
-    cov_ellipses = []
-    r_ellipses = []
-    q_ellipses = []
     for ii,logger_drivepath in enumerate(logs["fusion_filtered"]):
+        gnss_sessions = []
+        cov_ellipses = []
+        r_ellipses = []
+        q_ellipses = []
+
+
         if logger_drivepath is None or len(logger_drivepath) == 0:
             continue
         
@@ -328,60 +330,60 @@ def plot_fusion_map(logs, comparisons):
         lat_ellipses, lon_ellipses = generate_ellipses(df_temp.iloc[::10], type="Q", sigma=2)
         q_ellipses.append([lat_ellipses, lon_ellipses])
 
-    if len(gnss_sessions) > 0:
-        print("FUSION MAP")
-        fig = glp.plot_map(*gnss_sessions)
+        if len(gnss_sessions) > 0:
+            print("FUSION MAP")
+            fig = glp.plot_map(*gnss_sessions)
 
-        for jj, (lat_ellipses, lon_ellipses) in enumerate(cov_ellipses):
+            for jj, (lat_ellipses, lon_ellipses) in enumerate(cov_ellipses):
+                fig.add_trace(go.Scattermapbox(
+                    mode="lines",
+                    lon=lon_ellipses,
+                    lat=lat_ellipses,
+                    line=dict(color=glp.style.STANFORD_COLORS[(jj+len(cov_ellipses)) % 13]), # Use Matplotlib "C0" color
+                    name=f"{comparisons[jj]} 2-sigma EKF Covariance",
+                    ),  
+                )
+                fig.add_trace(go.Scattermapbox(
+                    mode="lines",
+                    lon=r_ellipses[jj][1],
+                    lat=r_ellipses[jj][0],
+                    line=dict(color=glp.style.STANFORD_COLORS[(jj+2*len(cov_ellipses)) % 13]),
+                    name=f"{comparisons[jj]} 2-sigma R Covariance",
+                    ),  
+                )
+                fig.add_trace(go.Scattermapbox(
+                    mode="lines",
+                    lon=q_ellipses[jj][1],
+                    lat=q_ellipses[jj][0],
+                    line=dict(color=glp.style.STANFORD_COLORS[(jj+3*len(cov_ellipses)) % 13]),
+                    name=f"{comparisons[jj]} 2-sigma Q Covariance",
+                    ),  
+                )
+
             fig.add_trace(go.Scattermapbox(
+                lat=gnss_concise_heading_lats,
+                lon=gnss_concise_heading_lons,
                 mode="lines",
-                lon=lon_ellipses,
-                lat=lat_ellipses,
-                line=dict(color=glp.style.STANFORD_COLORS[(jj+len(cov_ellipses)) % 13]), # Use Matplotlib "C0" color
-                name=f"{comparisons[jj]} 2-sigma EKF Covariance",
-                ),  
-            )
+                # line=dict(width=line_width),
+                name="GNSS concise heading lines"
+            ))
+
             fig.add_trace(go.Scattermapbox(
+                lat=filtered_heading_lats,
+                lon=filtered_heading_lons,
                 mode="lines",
-                lon=r_ellipses[jj][1],
-                lat=r_ellipses[jj][0],
-                line=dict(color=glp.style.STANFORD_COLORS[(jj+2*len(cov_ellipses)) % 13]),
-                name=f"{comparisons[jj]} 2-sigma R Covariance",
-                ),  
+                # line=dict(width=line_width),
+                name="Filtered heading lines"
+            ))
+
+
+
+            fig.update_layout(
+                autosize=False,
+                width=1800,
+                height=1000,
             )
-            fig.add_trace(go.Scattermapbox(
-                mode="lines",
-                lon=q_ellipses[jj][1],
-                lat=q_ellipses[jj][0],
-                line=dict(color=glp.style.STANFORD_COLORS[(jj+3*len(cov_ellipses)) % 13]),
-                name=f"{comparisons[jj]} 2-sigma Q Covariance",
-                ),  
-            )
-
-        fig.add_trace(go.Scattermapbox(
-            lat=gnss_concise_heading_lats,
-            lon=gnss_concise_heading_lons,
-            mode="lines",
-            # line=dict(width=line_width),
-            name="GNSS concise heading lines"
-        ))
-
-        fig.add_trace(go.Scattermapbox(
-            lat=filtered_heading_lats,
-            lon=filtered_heading_lons,
-            mode="lines",
-            # line=dict(width=line_width),
-            name="Filtered heading lines"
-        ))
-
-
-
-        fig.update_layout(
-            autosize=False,
-            width=1800,
-            height=1000,
-        )
-        fig.show()
+            fig.show()
 
 def plot_states_with_covariance(filtered_loggers, comparisons):
     for ii,filtered_logger in enumerate(filtered_loggers):
