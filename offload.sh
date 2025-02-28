@@ -39,3 +39,4 @@ scp bee:/data/recording/*.db* './bee_'$1
 scp bee:/data/recording/*.log* './bee_'$1
 scp bee:/data/*.log* './bee_'$1
 scp bee:/etc/build_info.json './bee_'$1
+scp bee:/opt/dashcam/bin/config.json './bee_'$1
