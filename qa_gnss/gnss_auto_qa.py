@@ -126,10 +126,12 @@ class GnssQa():
                     elif self.state == 3:
                         self.check_ttff = self._check_ttff()
                         if less_than(self.firmware_version, "5.1.16"):
+                            print(f"Version is {self.firmware_version}, doing FSYNC")
                             self.state += 1
                         else:
+                            print(f"Version is {self.firmware_version}, skipping FSYNC")
                             self.state += 2
-
+                        
             elif self.state == 1:
                 if self.first_fix_count is None:
                     self.first_fix_count = self.count
@@ -183,7 +185,8 @@ class GnssQa():
                 subprocess.run(["systemctl", "stop", "hivemapper-data-logger"])
                 print("hivemapper-data-logger presumably stopped")
                 time.sleep(10)
-                subprocess.run(["chmod", "+x", "/data/qa_gnss/datalogger"])
+                if less_than(self.firmware_version, "5.2.7"):
+                    subprocess.run(["chmod", "+x", "/data/qa_gnss/datalogger"])
                 self.check_fsync_connection = self._check_fsync_connection()
                 subprocess.run(["systemctl", "enable", "hivemapper-data-logger"])
                 subprocess.run(["systemctl", "start", "hivemapper-data-logger"])
@@ -364,7 +367,14 @@ class GnssQa():
         fsync_waits = []
         fsync_wait_count = 0
 
-        command = ["/data/qa_gnss/datalogger", "log",
+        # Niessl 2025-02-23: Version 5.2.7 and later logs FSYNC correctly.
+        # TODO: Change this earlier if any previous versions also support it.
+        datalogger_path = "/data/qa_gnss/datalogger"
+        if geq(self.firmware_version, "5.2.7"):
+            datalogger_path = "/opt/dashcam/bin/datalogger"
+        print(f"Using {datalogger_path}")
+
+        command = [datalogger_path, "log",
                    "--gnss-mga-offline-file-path=/data/mgaoffline.ubx",
                    "--imu-json-destination-folder=/data/recording/imu",
                    "--gnss-json-destination-folder=/data/recording/gps",
