@@ -4,9 +4,14 @@ Setup:
 1. pip install redis pandas protobuf
 2. protoc --python_out=. sensordata.proto
 
+
+Only pushes data the is after the first nav-pvt system time.
+
 """
 
+import sys
 import time
+import signal
 import base64
 import sqlite3
 import argparse
@@ -26,13 +31,15 @@ def main():
     # get path to database from argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--db_path", type=str, default="sensors-v0-0-2.db", help="Path to the SQLite database file")
+    parser.add_argument("--session", type=str, default="", help="Session ID to replay")
     args = parser.parse_args()
 
-    sr = SensorReplay(args.db_path)
+    sr = SensorReplay(args.db_path, args.session)
+    signal.signal(signal.SIGINT, sr.handle_exit)
     sr.run_replay()
 
 class SensorReplay():
-    def __init__(self, sensor_db_path):
+    def __init__(self, sensor_db_path, session = ""):
 
 
         # Redis configuration
@@ -40,16 +47,17 @@ class SensorReplay():
         self.redis_port = 6379
         self.redis_conf_file = "redis.conf"
         self.sensor_db_path = sensor_db_path
+        self.session = session
 
         
         self.redis_table_to_list = {
+                                "nav_pvt" : "NavPvt", # must be first for sync time to work out
                                 "gnss" : "gnss_data",
                                 "gnss_auth" : "gnss_auth_data",
                                 "imu" : "imu_data",
                                 "magnetometer" : "magnetometer_data",
                                 "nav_cov" : "NavCov",
                                 "nav_posecef" : "NavPosecef",
-                                "nav_pvt" : "NavPvt",
                                 "nav_status" : "NavStatus",
                                 "nav_timegps" : "NavTimegps",
                                 "nav_velecef" : "NavVelecef",
@@ -80,16 +88,33 @@ class SensorReplay():
         self.sql_data = {}
         self.row_index = {}
         self.system_timestamps = {}
+        nav_pvt_start_time = None
+        nav_pvt_start_itow_ms = None
         for table in self.redis_table_to_list:
             self.sql_data[table] = self.fetch_sqlite_table(table)
             self.row_index[table] = 0
             if table in self.system_time_columns:
                 self.sql_data[table]["sync_time"] = pd.to_datetime(self.sql_data[table][self.system_time_columns[table]],
                                                                                         format="%Y-%m-%d %H:%M:%S.%f")
+                if table == "nav_pvt":
+                    nav_pvt_start_time = self.sql_data[table]["sync_time"][0]
+                    nav_pvt_start_itow_ms = self.sql_data[table]["itow_ms"][0]
+                elif nav_pvt_start_time is not None:
+                    self.sql_data[table] = self.sql_data[table][self.sql_data[table]["sync_time"] >= nav_pvt_start_time]
+                    self.sql_data[table].reset_index(drop=True, inplace=True)
                 if len(self.sql_data[table]) > 0:
                     self.system_timestamps[table] = self.sql_data[table]["sync_time"][0]
+            else:
+                if nav_pvt_start_itow_ms is not None:
+                    self.sql_data[table] = self.sql_data[table][self.sql_data[table]["itow_ms"] >= nav_pvt_start_itow_ms]
+                    self.sql_data[table].reset_index(drop=True, inplace=True)
 
         self.start_redis_server()
+
+    def adjust_itow_ms(self, itow_ms):
+        
+        return itow_ms
+        # return int((itow_ms + 371345500) % 6.048E8)
 
     def run_replay(self):
         """Runs the replay loop."""
@@ -130,6 +155,8 @@ class SensorReplay():
                 self.system_timestamps[min_key] = None
             else:
                 self.system_timestamps[min_key] = self.sql_data[min_key]["sync_time"][self.row_index[min_key]]
+
+        self.clear_redis()
 
     def serialize_gnss(self, row):
         message = sensordata.GnssData()
@@ -203,7 +230,7 @@ class SensorReplay():
     
     def serialize_nav_cov(self, row):
         message = sensordata.NavCov()
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.version = row.version
         message.pos_cov_valid = row.posCovValid
         message.vel_cov_valid = row.velCovValid
@@ -223,7 +250,7 @@ class SensorReplay():
     
     def serialize_nav_posecef(self, row):
         message = sensordata.NavPosecef()
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.ecef_x_cm = int(np.rint(row.ecef_x * 100.))
         message.ecef_y_cm = int(np.rint(row.ecef_y * 100.))
         message.ecef_z_cm = int(np.rint(row.ecef_z * 100.))
@@ -233,7 +260,7 @@ class SensorReplay():
     def serialize_nav_pvt(self, row):
         message = sensordata.NavPvt()
         message.system_time = row.system_time
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.valid = (row.valid_date << 0) | (row.valid_time << 1) | (row.fully_resolved << 2) | (row.valid_mag << 3)
         message.fix_type = row.fix_type
         message.flags = (row.gnss_fix_ok << 0) | (row.diff_soln << 1) | (row.psm_state << 2) | (row.head_veh_valid << 5) | (row.carr_soln << 6)
@@ -257,7 +284,7 @@ class SensorReplay():
     
     def serialize_nav_status(self, row):
         message = sensordata.NavStatus()
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.gps_fix = row.gps_fix
         message.flags = (row.gps_fix_ok << 0) | (row.diff_soln << 1) | (row.wkn_set << 2) | (row.tow_set << 3)
         message.fix_stat = (row.diff_corr << 0) | (row.carr_soln_valid << 1)
@@ -268,7 +295,7 @@ class SensorReplay():
     
     def serialize_nav_timegps(self, row):
         message = sensordata.NavTimegps()
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.ftow_ns = row.ftow_ns
         message.week = row.week
         message.leap_s = row.leap_s
@@ -278,7 +305,7 @@ class SensorReplay():
     
     def serialize_nav_velecef(self, row):
         message = sensordata.NavVelecef()
-        message.itow_ms = row.itow_ms
+        message.itow_ms = self.adjust_itow_ms(row.itow_ms)
         message.ecef_vx_cm_s = int(np.rint(row.ecef_vx * 100.))
         message.ecef_vy_cm_s = int(np.rint(row.ecef_vy * 100.))
         message.ecef_vz_cm_s = int(np.rint(row.ecef_vz * 100.))
@@ -288,13 +315,35 @@ class SensorReplay():
     def serialize_nav_dop(self, nav_pvt_system_time, nav_pvt_itow_ms):
         message = sensordata.NavDop()
         message.system_time = nav_pvt_system_time
-        message.itow_ms = nav_pvt_itow_ms
+        message.itow_ms = self.adjust_itow_ms(nav_pvt_itow_ms)
         return message.SerializeToString()
     
     def serialize_nav_sat(self, nav_pvt_system_time, nav_pvt_itow_ms):
         message = sensordata.NavSat()
         message.system_time = nav_pvt_system_time
-        message.itow_ms = nav_pvt_itow_ms
+        message.itow_ms = self.adjust_itow_ms(nav_pvt_itow_ms)
+        message.version = 1
+        message.num_svs = 2  # Two satellites in the list
+
+        # Create the first dummy Svs entry
+        dummy_svs1 = message.svs.add()
+        dummy_svs1.gnss_id = 1         # Example GNSS system ID
+        dummy_svs1.sv_id = 10          # Example satellite ID
+        dummy_svs1.cno_dbhz = 45       # Carrier-to-noise ratio in dB-Hz
+        dummy_svs1.elev_deg = 30       # Elevation angle in degrees
+        dummy_svs1.azim_deg = 120      # Azimuth angle in degrees
+        dummy_svs1.pr_res_me1 = 5   # Pseudorange residual in meters * 0.1
+        dummy_svs1.flags = 0b111111    # Example flags
+
+        # Create the second dummy Svs entry
+        dummy_svs2 = message.svs.add()
+        dummy_svs2.gnss_id = 2         # Another GNSS system ID
+        dummy_svs2.sv_id = 25          # Another satellite ID
+        dummy_svs2.cno_dbhz = 50       # Carrier-to-noise ratio in dB-Hz
+        dummy_svs2.elev_deg = 45       # Elevation angle in degrees
+        dummy_svs2.azim_deg = 200      # Azimuth angle in degrees
+        dummy_svs2.pr_res_me1 = -31   # Pseudorange residual in meters * 0.1
+        dummy_svs2.flags = 0b111111    # Example flags
         return message.SerializeToString()
     
     def serialize_mon_rf(self, nav_pvt_system_time):
@@ -316,8 +365,28 @@ class SensorReplay():
 
         df = pd.read_sql_query(query, conn)
 
+        if self.session != "":
+            if table_name == "gnss_auth":
+                df = df[df["session_id"] == self.session]
+            else:
+                df = df[df["session"] == self.session]
+
+        df.reset_index(drop=True, inplace=True)
+
         conn.close()
         return df
+
+    def clear_redis(self):
+        try:
+            # Connect to Redis on localhost
+            client = redis.Redis(host=self.redis_host, port=self.redis_port, db=0)
+            
+            # Flush all data from Redis
+            client.flushall()
+            print("All data cleared from Redis.")
+        except Exception as e:
+            print(f"Error: {e}")
+
 
     def start_redis_server(self):
         """Starts a Redis server as a subprocess."""
@@ -330,11 +399,18 @@ class SensorReplay():
             # Wait a bit to ensure the Redis server starts
             time.sleep(2)
 
+            self.clear_redis()
+
             print("Redis server started successfully.")
             return process
         except Exception as e:
             print(f"Failed to start Redis server: {e}")
             raise e
+
+    def handle_exit(self, signal, frame):
+        print("Clearing data on exit...")
+        self.clear_redis()
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
