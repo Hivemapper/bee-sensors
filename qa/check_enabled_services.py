@@ -63,6 +63,7 @@ def check_enabled_services():
                          "odc-api",
                          "redis",
                          "redis-handler",
+                         "cpu-mem-logger",
                          ]
 
     enabled_services = get_enabled_services()
