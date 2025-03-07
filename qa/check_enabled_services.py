@@ -65,7 +65,10 @@ def check_enabled_services():
                          "redis-handler",
                          "cpu-mem-logger",
                          ]
-
+    
+    disabled_services = [
+                         "gnss-eol-test",
+                        ]
     enabled_services = get_enabled_services()
     for service in required_services:
         service_name = f"{service}.service"
@@ -73,6 +76,12 @@ def check_enabled_services():
             print(f"[FAIL] Service {service} is not enabled.")
         else:
             print(f"[PASS] Service {service} is enabled.")
+    for service in disabled_services:
+        service_name = f"{service}.service"
+        if service_name in enabled_services:
+            print(f"[FAIL] Service {service} is enabled.")
+        else:
+            print(f"[PASS] Service {service} is disabled.")
 
 
 def lte_file_check():
