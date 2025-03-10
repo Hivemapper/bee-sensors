@@ -27,6 +27,8 @@ def test_LTE():
     time.sleep(2)
     subprocess.run(["rm", "-f", "/data/recording/lte-status.log"])
     time.sleep(1)
+    subprocess.run(["systemctl", "enable", "lte"])
+    time.sleep(2)
     subprocess.run(["systemctl", "start", "lte"])
     print("Waiting 30 seconds for initial LTE log write")
     time.sleep(35)
@@ -125,12 +127,11 @@ def lte_file_check():
 
 
 def main():
-    print("Checking all services:")
-    check_enabled_services()
     print("Re-enabling and testing LTE:")
     test_LTE()
     lte_file_check()
-
+    print("Checking all services:")
+    check_enabled_services()
 
 if __name__ == "__main__":
     main()
