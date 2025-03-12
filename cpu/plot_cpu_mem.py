@@ -1,3 +1,4 @@
+import os
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
@@ -35,7 +36,7 @@ def parse_log_file(file_path):
 
     return data_collection, timestamp_colleciton
 
-def plot_stacked_bar(data, timestamps, index):
+def plot_stacked_bar(data, timestamps, index, dir=None):
     """
     Generate stacked bar charts for total CPU and memory usage over time.
     """
@@ -71,8 +72,6 @@ def plot_stacked_bar(data, timestamps, index):
                 cpu_stacks[process].append(0)
                 memory_stacks[process].append(0)
 
-        # print("Process names: ", process_names)
-
     # Plot CPU usage
     plt.figure(figsize=(12, 6))
     bottom = [0] * len(timestamps)  # To stack bars
@@ -86,7 +85,12 @@ def plot_stacked_bar(data, timestamps, index):
     plt.xticks(rotation=45, ha="right")
     plt.legend(loc="upper left", bbox_to_anchor=(1, 1), title="Processes")
     plt.tight_layout()
-    plt.savefig(f"stacked_cpu_usage_{index}.png")
+    if dir is not None:
+        plt.savefig(f"{dir}/stacked_cpu_usage_{index}.png")
+    else:
+        plt.savefig(f"stacked_cpu_usage_{index}.png")
+
+    plt.close()
 
     # Plot Memory usage
     plt.figure(figsize=(12, 6))
@@ -101,18 +105,26 @@ def plot_stacked_bar(data, timestamps, index):
     plt.xticks(rotation=45, ha="right")
     plt.legend(loc="upper left", bbox_to_anchor=(1, 1), title="Processes")
     plt.tight_layout()
-    plt.savefig(f"stacked_memory_usage_{index}.png")
+    if dir is not None:
+        plt.savefig(f"{dir}/stacked_memory_usage_{index}.png")
+    else:
+        plt.savefig(f"stacked_memory_usage_{index}.png")
+
+    plt.close()
 
 def main():
     # Path to the log file
-    log_file_path = "cpu-mem-logger.log"
+    log_file_path = "cpu-mem-logger-ambititious-plum-beaver-20250303-102134.log"
+    dir_path = log_file_path.split(".")[0]
+    os.makedirs(dir_path, exist_ok=True)
+
 
     # Parse the log file
     data, timestamps = parse_log_file(log_file_path)
 
     # Plot the data
     for i in range(len(data)):
-        plot_stacked_bar(data[i], timestamps[i],i+1)
+        plot_stacked_bar(data[i], timestamps[i],i+1, dir=dir_path)
 
     plt.show()
 
