@@ -3,6 +3,22 @@ from collections import defaultdict
 
 import matplotlib.pyplot as plt
 
+def main():
+    # Path to the log file
+    CPU_LOG_PATH = "cpu-mem-logger.log"
+
+    dir_path = CPU_LOG_PATH.split(".")[0]
+    os.makedirs(dir_path, exist_ok=True)
+
+    # Parse the log file
+    data, timestamps = parse_log_file(CPU_LOG_PATH)
+
+    # Plot the data
+    for i in range(len(data)):
+        plot_stacked_bar(data[i], timestamps[i],i+1, dir=dir_path)
+
+    plt.show()
+
 def parse_log_file(file_path):
     """
     Parse the log file to extract CPU and memory usage over time for each process.
@@ -111,22 +127,6 @@ def plot_stacked_bar(data, timestamps, index, dir=None):
         plt.savefig(f"stacked_memory_usage_{index}.png")
 
     plt.close()
-
-def main():
-    # Path to the log file
-    log_file_path = "cpu-mem-logger-ambititious-plum-beaver-20250303-102134.log"
-    dir_path = log_file_path.split(".")[0]
-    os.makedirs(dir_path, exist_ok=True)
-
-
-    # Parse the log file
-    data, timestamps = parse_log_file(log_file_path)
-
-    # Plot the data
-    for i in range(len(data)):
-        plot_stacked_bar(data[i], timestamps[i],i+1, dir=dir_path)
-
-    plt.show()
 
 if __name__ == "__main__":
     main()
