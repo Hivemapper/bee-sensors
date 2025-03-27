@@ -15,7 +15,7 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
-class AverageTest():
+class PreprocessImuMagQaData():
 
     def __init__(self, dataset_dir):
         self.dataset_dir = dataset_dir
@@ -258,4 +258,4 @@ class AverageTest():
 
 if __name__ == "__main__":
     dataset_path = "/home/derekhive/datasets/IMU-Data_2025-03-18/"
-    avg = AverageTest(dataset_path)
+    data = PreprocessImuMagQaData(dataset_path)
