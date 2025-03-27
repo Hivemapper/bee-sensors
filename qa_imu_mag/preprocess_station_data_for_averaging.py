@@ -1,5 +1,7 @@
 """Input calibration arm IMU/Magnetometer data and output downsampled versions.
 
+Data is smoothed using a rolling average and then downsampled.
+
 """
 
 __author__ = "D. Knowles"

@@ -1,9 +1,11 @@
-"""Check accelerometer, gyroscope, and magnetometer data for quality assurance.
+"""Computes Dynamic Time Warping (DTW) barycenter averaging centers.
+
+Assumes data was created using the preprocess_stat_data_for_averaging.py script.
 
 """
 
 __author__ = "D. Knowles"
-__date__ = "24 Oct 2024"
+__date__ = "20 Mar 2025"
 
 import os
 
