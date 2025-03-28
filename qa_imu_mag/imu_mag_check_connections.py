@@ -2,13 +2,11 @@
 
 """
 
-import os
 import time
 import json
 import sqlite3
 import argparse
-import subprocess
-
+from pathlib import Path
 
 def geq(ver1, ver2):
     """ Returns true if ver1 >= ver2"""
@@ -238,10 +236,6 @@ if __name__ == "__main__":
     with open("/etc/build_info.json") as file:
         build_info = json.load(file)
     firmware_version = build_info["odc-version"]
-
-    
-    # Move this up top
-    from pathlib import Path
     
     # Choose the appropriate database path based on the firmware version
     database_path = None
