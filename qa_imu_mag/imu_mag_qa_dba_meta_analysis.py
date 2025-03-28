@@ -6,19 +6,20 @@ __author__ = "D. Knowles"
 __date__ = "20 Mar 2025"
 
 import os
-import subprocess
 from datetime import datetime
 
-import sqlite3
-import numpy as np
 import pandas as pd
-from imu_mag_qa_dba import QaImuMagDBA
 import matplotlib.pyplot as plt
+
+from imu_mag_qa_dba import QaImuMagDBA
 
 def main():
 
     data_cols = ["acc_x", "acc_y", "acc_z", "gyro_x", "gyro_y", "gyro_z", "mag_x", "mag_y", "mag_z"]
-    l2_error, zero_mean_bias = process_dataset(data_cols)
+    l2_error, zero_mean_bias, test_results = process_dataset(data_cols)
+    print("TEST RESULTS SUMMARY")
+    for station, results in test_results.items():
+        print(f"{station} PASS : {results['pass']}, FAIL : {results['fail']}")
     plot_l2_error(l2_error, data_cols)
     plot_zero_mean_bias(zero_mean_bias, data_cols)
     plt.show()
@@ -27,6 +28,7 @@ def process_dataset(data_cols):
 
     l2_error = {}
     zero_mean_bias = {}
+    test_results = {}
 
     # run for each test log
     dataset_path = "/home/derekhive/datasets/IMU-Data_2025-03-18/"
@@ -34,6 +36,7 @@ def process_dataset(data_cols):
             print(station)
             l2_error[station] = pd.DataFrame(columns=data_cols)
             zero_mean_bias[station] = pd.DataFrame(columns=data_cols)
+            test_results[station] = {"pass": 0, "fail": 0}
 
             directories = [d for d in os.listdir(os.path.join(dataset_path, station)) if os.path.isdir(os.path.join(dataset_path, station, d))]
             for d_idx, device_dir in enumerate(sorted(directories, key=extract_timestamp)):
@@ -41,9 +44,9 @@ def process_dataset(data_cols):
                 db_path = next((os.path.join(db_dir,x) for x in os.listdir(db_dir) if x.endswith(".db") and "sensors" in x), None)
                 if db_path is None or "fail" in db_path:
                     continue
-                # station = db_path.split("/")[-3]
-                # station_reference_path = os.path.join(os.path.dirname(db_path), "..", f"dba_centers_{station.lower()}.csv")
-                station_reference_path = "/home/derekhive/datasets/IMU-Data_2025-03-18/Station1/dba_centers_station1.csv"
+                station = db_path.split("/")[-3]
+                station_reference_path = os.path.join(os.path.dirname(db_path), "..", f"dba_centers_{station.lower()}.csv")
+                # station_reference_path = "/home/derekhive/datasets/IMU-Data_2025-03-18/Station3/dba_centers_station3.csv"
                 log_dir = os.path.dirname(db_path)
                 print(f"Processing {db_path}")
 
@@ -53,8 +56,10 @@ def process_dataset(data_cols):
                                   verbose=True)
                 if avg.run_test():
                     print(f"[PASS] final")
+                    test_results[station]["pass"] += 1
                 else:
                     print(f"[FAIL] final")
+                    test_results[station]["fail"] += 1
                 
                 l2_error_new = pd.DataFrame(avg.test_metrics["l2_error"], index=[0])
                 zero_mean_bias_new = pd.DataFrame(avg.test_metrics["zero_mean_bias"], index=[0])
@@ -66,11 +71,11 @@ def process_dataset(data_cols):
                                                 ignore_index=True)
                     zero_mean_bias[station] = pd.concat([zero_mean_bias[station], zero_mean_bias_new],
                                                         ignore_index=True)
-                # if d_idx >= 4:
-                #     break
+                if d_idx >= 5:
+                    break
 
 
-    return l2_error, zero_mean_bias
+    return l2_error, zero_mean_bias, test_results
 
 def plot_l2_error(l2_error, data_cols):
     fig, axs = plt.subplots(3, 3, figsize=(18, 10))
