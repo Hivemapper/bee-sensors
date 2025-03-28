@@ -70,13 +70,14 @@ class AverageTest():
             cols = self.data_cols
 
         fig_centers, axes_centers = plt.subplots(len(cols), 1, figsize=(18, 10))
+        plt.suptitle(f"Dynamic Time Warping Barycenter Averaging")
         for station in stations:
             fig_dataset, axes_dataset = plt.subplots(len(cols), 1, figsize=(18, 10))
             if len(cols) == 1:
                 axes_dataset = [axes_dataset]
             else:
                 axes_dataset = axes_dataset.flatten()
-            plt.suptitle(f"Station {station}")
+            plt.suptitle(f"Dynamic Time Warping Barycenter Averaging {station}")
 
             for col_idx, col in enumerate(cols):
                 # plot all columns in one figure

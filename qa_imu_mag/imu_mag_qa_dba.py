@@ -12,11 +12,27 @@ from datetime import datetime
 import sqlite3
 import numpy as np
 import pandas as pd
+from dtaidistance import dtw
+from dtaidistance import dtw_visualisation as dtwvis
+import matplotlib.pyplot as plt
 
 class QaImuMagDBA():
-
-    def __init__(self, db_path):
+    """QA test comparing IMU/Mag data against the average for the robot arm.
+    
+    Parameters
+    ----------
+    db_path : str
+        Path to the sesnors.db file containing IMU and magnetometer data.
+    sn : str, optional
+        Serial number of the device. This is used for naming output files.
+        If not provided, an empty string is used by default.
+    
+    """
+    def __init__(self, db_path, log_dir, station_reference_file, verbose=False):
         self.db_path = db_path
+        self.log_dir = log_dir
+        self.station_reference_file = station_reference_file
+        self.verbose = verbose
         
         self.mag_log = None
         self.imu_log = None
@@ -26,11 +42,79 @@ class QaImuMagDBA():
         self.imu_cols = ["acc_x", "acc_y", "acc_z", "gyro_x", "gyro_y", "gyro_z"]
         self.mag_cols = ["mag_x", "mag_y", "mag_z"]
         self.downsampled_data = {c : None for c in self.imu_cols + self.mag_cols}
-        self.test_results = {c : None for c in self.imu_cols + self.mag_cols}
+        self.test_results = {c : False for c in self.imu_cols + self.mag_cols}
         self.test_metrics = {}
 
+        # global parameters
+        self.debug_plots = False
+        self.test_thresholds = {
+                                "acc_x" : 0.2,
+                                "acc_y" : 0.1,
+                                "acc_z" : 0.15,
+                                "gyro_x" : 12.0,
+                                "gyro_y" : 2.5,
+                                "gyro_z" : 30.0,
+                                "mag_x" : 350.0,
+                                "mag_y" : 175.0,
+                                "mag_z" : 250.0,
+                               }
         self.load_database()
         self.load_station_reference()
+
+
+    def run_test(self):
+        """Run the QA test.
+
+        This method runs the test and returns True if the test passes,
+        otherwise it returns False.
+
+        Returns
+        -------
+        bool
+            True if the test passes, False otherwise.
+        
+        """
+
+        self.compute_dtw()
+
+        # check L2 error against thresholds
+        test_pass = True
+        for col in self.imu_cols + self.mag_cols:
+            if self.test_metrics["l2_error"].get(col, np.inf) < self.test_thresholds[col]:
+                self.test_results[col] = True
+            else:
+                self.test_results[col] = False
+                test_pass = False
+
+        self.write_results()
+
+        return test_pass
+
+    def compute_dtw(self):
+
+        self.test_metrics["l2_error"] = {}
+        for col in self.imu_cols + self.mag_cols:
+            if self.verbose:
+                print(f"Computing DTW for {col}")
+            test_series = self.test_data[col].values
+            test_series = test_series[~np.isnan(test_series)]
+            ref_series = self.station_reference[col].values
+            ref_series = ref_series[~np.isnan(ref_series)]
+            
+            path = dtw.warping_path(ref_series, test_series)
+            
+            # use path to make time synchroized series
+            new_ref_series = np.array([ref_series[i] for i, _ in path])
+            new_test_series = np.array([test_series[j] for _, j in path])
+            self.test_metrics["l2_error"][col] = np.linalg.norm(new_ref_series - new_test_series)
+
+            if self.debug_plots:
+                dtwvis.plot_warping(ref_series, test_series, path, filename=f"{self.sn}_warp_{col}.png")
+                plt.plot(new_ref_series, label="Reference")
+                plt.plot(new_test_series, label="Test")
+                plt.legend()
+                plt.savefig(f"{self.sn}_plot_{col}.png")
+                plt.close()
 
     def load_database(self):
 
@@ -60,50 +144,13 @@ class QaImuMagDBA():
 
         for col in self.imu_cols + self.mag_cols:
             self.downsampled_data[col] = self.downsample(col)
-        
-        self.test_data = pd.DataFrame(self.downsampled_data)
-        # for col in ["gyro_x", "gyro_y", "gyro_z", "acc_x", "acc_y", "acc_z"]:
-        #     fig, ax = plt.subplots(5,1, figsize=(18, 10))
-        #     original = self.imu_log[col].to_numpy()
-        #     ax[0].plot(np.arange(len(original)),original)
-        #     ax[0].set_title(f"{col} original")
-        #     downsampled_50_mean = self.imu_log.groupby(self.imu_log.index // 50).mean()[col].to_numpy()
-        #     ax[1].plot(np.arange(len(downsampled_50_mean)),downsampled_50_mean)
-        #     ax[1].set_title(f"{col} downsampled 50 mean")
-        #     downsampled_50 = self.imu_log[col].to_numpy()[::50]
-        #     ax[2].plot(np.arange(len(downsampled_50)),downsampled_50)
-        #     ax[2].set_title(f"{col} Downsampled 50")
-        #     smoothed = self.imu_log[col].rolling(50).mean().to_numpy()
-        #     ax[3].plot(np.arange(len(smoothed)),smoothed)
-        #     ax[3].set_title(f"{col} Smoothed 50")
-        #     smoothed_downsampled = self.imu_log[col].rolling(200).mean().to_numpy()[::50]
-        #     ax[4].plot(np.arange(len(smoothed_downsampled)),smoothed_downsampled)
-        #     ax[4].set_title(f"{col} Smoothed 200 Downsampled 50")
-        # for col in ["mag_x", "mag_y", "mag_z"]:
-        #     fig, ax = plt.subplots(5,1, figsize=(18, 10))
-        #     original = self.mag_log[col].to_numpy()
-        #     ax[0].plot(np.arange(len(original)),original)
-        #     ax[0].set_title(f"{col} original")
-        #     downsampled_50_mean = self.mag_log.groupby(self.mag_log.index // 25).mean()[col].to_numpy()
-        #     ax[1].plot(np.arange(len(downsampled_50_mean)),downsampled_50_mean)
-        #     ax[1].set_title(f"{col} downsampled 50 mean")
-        #     downsampled_50 = self.mag_log[col].to_numpy()[::8]
-        #     ax[2].plot(np.arange(len(downsampled_50)),downsampled_50)
-        #     ax[2].set_title(f"{col} Downsampled 50")
-        #     smoothed = self.mag_log[col].rolling(25).mean().to_numpy()
-        #     ax[3].plot(np.arange(len(smoothed)),smoothed)
-        #     ax[3].set_title(f"{col} Smoothed 50")
-        #     smoothed_downsampled = self.mag_log[col].rolling(25).mean().to_numpy()[::8]
-        #     ax[4].plot(np.arange(len(smoothed_downsampled)),smoothed_downsampled)
-        #     ax[4].set_title(f"{col} Smoothed 200 Downsampled 50")
+        self.test_data = pd.DataFrame(dict([(key, pd.Series(value)) for key, value in self.downsampled_data.items()]) )
 
     def load_station_reference(self):
-        station = self.db_path.split("/")[-3]
-        station_reference_path = os.path.join(os.path.dirname(self.db_path), "..", f"dba_centers_{station.lower()}.csv")
-        self.station_reference = pd.read_csv(station_reference_path)
+        self.station_reference = pd.read_csv(self.station_reference_file)
 
     def downsample(self, col):
-        if col in ["mag_x", "mag_y", "mag_z"]:
+        if col in self.mag_cols:
             downsampled = self.mag_log[col].rolling(25).mean().to_numpy()[::8]
         else:
             downsampled = self.imu_log[col].rolling(200).mean().to_numpy()[::50]
@@ -192,6 +239,25 @@ class QaImuMagDBA():
         except subprocess.CalledProcessError as e:
             print("Error during recovery:", e)
 
+    def write_results(self):
+        filename = os.path.join(self.log_dir,f"imu_mag_qa_dba_results.log")
+        with open(filename, "w") as f:
+            for col, bias in self.test_metrics["zero_mean_bias"].items():
+                msg = f"Zero mean bias {col}: {bias}"
+                f.write(msg + "\n")
+                print(msg)
+            for col, error in self.test_metrics["l2_error"].items():
+                msg = f"L2 error {col}: {error}"
+                f.write(msg + "\n")
+                print(msg)
+            for col in self.mag_cols + self.imu_cols:
+                if self.test_results[col]:
+                    msg = f"[PASS] {col} similarity check."
+                else:
+                    msg = f"[FAIL] {col} similarity check."
+                f.write(msg + "\n")
+                print(msg)            
+
 def extract_timestamp(directory_name):
     timestamp_str = directory_name.rsplit("_", 1)[-1]
     return datetime.strptime(timestamp_str, "%Y-%m-%dT%H%M")
@@ -202,10 +268,23 @@ if __name__ == "__main__":
             print(station)
             directories = [d for d in os.listdir(os.path.join(dataset_path, station)) if os.path.isdir(os.path.join(dataset_path, station, d))]
             for d_idx, device_dir in enumerate(sorted(directories, key=extract_timestamp)):
-                log_dir = os.path.join(dataset_path, station, device_dir)
-                log_path = next((os.path.join(log_dir,x) for x in os.listdir(log_dir) if x.endswith(".db") and "sensors" in x), None)
-                print(f"Processing {log_path}")
-                avg = QaImuMagDBA(log_path)
+                db_dir = os.path.join(dataset_path, station, device_dir)
+                db_path = next((os.path.join(db_dir,x) for x in os.listdir(db_dir) if x.endswith(".db") and "sensors" in x), None)
+                if "fail" in db_path:
+                    continue
+                station = db_path.split("/")[-3]
+                station_reference_path = os.path.join(os.path.dirname(db_path), "..", f"dba_centers_{station.lower()}.csv")
+                log_dir = os.path.dirname(db_path)
+                print(f"Processing {db_path}")
+
+                avg = QaImuMagDBA(db_path,
+                                  log_dir,
+                                  station_reference_path,
+                                  verbose=True)
+                if avg.run_test():
+                    print(f"[PASS] final")
+                else:
+                    print(f"[FAIL] final")
                 if d_idx > 5:
                     break
             break
