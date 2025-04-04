@@ -16,6 +16,8 @@
 #
 
 import time
+import json
+import sqlite3
 import subprocess
 
 
@@ -125,8 +127,92 @@ def lte_file_check():
 
     print("[PASS] LTE responsive.")
 
+def geq(ver1, ver2):
+    """ Returns true if ver1 >= ver2"""
+    x1,y1,z1 = ver1.split(".")
+    x2,y2,z2 = ver2.split(".")
+    
+    if int(x1) > int(x2):
+        return True
+    if int(x1) < int(x2):
+        return False
+    if int(y1) > int(y2):
+        return True
+    if int(y1) < int(y2):
+        return False
+    if int(z1) > int(z2):
+        return True
+    if int(z1) < int(z2):
+        return False    
+    return True
+
+def less_than(ver1, ver2):
+    """ Returns true if ver1 < ver2"""
+    return not geq(ver1, ver2)
+
+def get_json_config(key):
+    """Get a value from the JSON configuration file.
+
+    Returns None if key is not found or 
+    file doesn't exist.
+
+    Parameters
+    ----------
+    key : str
+        The key to get from the JSON configuration file
+
+    Returns
+    -------
+    value
+        The value of the key in the JSON configuration file
+    
+    """
+
+    config_file_path = "/opt/dashcam/bin/config.json"
+    try:
+        with open(config_file_path, "r") as f:
+            config = json.load(f)
+            value = config[key]
+    except FileNotFoundError:
+        return None
+    except KeyError:
+        return None
+
+    return value
+
+def enable_bk(db_path, plugin_name, state):
+    conn = None
+    try:   
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        sql_command = "INSERT OR REPLACE INTO plugins (plugin, state) VALUES (?, ?);"
+        cursor.execute(sql_command, (plugin_name, state))
+
+        conn.commit()
+        print(f"Rows affected: {cursor.rowcount}")
+    except Exception as e:
+        print(f"An error occurred while changing {plugin_name} plugin: {e}")
+        print(f"[FAIL] Failed to switch {plugin_name} plugin to {state}.")
+        return
+    finally:
+        if conn:
+            conn.close()
+
+    print(f"[PASS] {plugin_name} plugin {state}.")
 
 def main():
+    
+    with open("/etc/build_info.json") as file:
+        build_info = json.load(file)
+    firmware_version = build_info["odc-version"]
+
+    if geq(firmware_version, "5.4.7"):
+        db_path = get_json_config("ODC_API_DB_PATH")
+        plugin_name = "beekeeper-plugin"
+        state = "enabled"
+        enable_bk(db_path, plugin_name, state)
+
     print("Re-enabling and testing LTE:")
     test_LTE()
     lte_file_check()
