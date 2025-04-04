@@ -207,7 +207,7 @@ def main():
         build_info = json.load(file)
     firmware_version = build_info["odc-version"]
 
-    if geq(firmware_version, "5.4.7"):
+    if geq(firmware_version, "5.2.0"):
         db_path = get_json_config("ODC_API_DB_PATH")
         plugin_name = "beekeeper-plugin"
         state = "enabled"
