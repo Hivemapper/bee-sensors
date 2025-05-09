@@ -63,7 +63,7 @@ class UbxParser():
                 msg_per_sv_labels = []      # unique labels for per satellite data
 
                 for name, value in parsed_data.__dict__.items():
-                    if name[0] == "_" or "reserved" in name:
+                    if name[0] == "_" or "reserved" in name or "CFG" in name:
                         # ignore private and reserved attributes
                         continue
                     if "_" not in name:
@@ -168,6 +168,9 @@ class UbxParser():
         """
 
         gps_millis = None
+        if "towValid" not in parsed_data.__dict__ or "weekValid" not in parsed_data.__dict__:
+            # if gps time is not valid, then return None
+            return gps_millis
         if parsed_data.towValid and parsed_data.weekValid:
 
             gps_week = parsed_data.week

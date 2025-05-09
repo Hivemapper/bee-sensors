@@ -3,3 +3,5 @@ data/
 .DS_Store
 __pycache__/
 *.db
+cpu/*.log
+cpu/*/*.png

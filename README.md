@@ -34,7 +34,7 @@ Use the `ubx_get_cfg.py` file to save all possible configuration parameters on t
 
 #### Requirements
 - installation of `ubxtool` that's included in [gpsd](https://gpsd.gitlab.io/gpsd/building.html) version 3.25 (version is important)
- - `gpsd` running on the dascham:  
+ - `gpsd` running on the dascham:
     On the old Bee devices:
     ```
     gpsd -G -S 9090 --speed 460800 -D 4 -n -N /dev/ttyS2
@@ -51,7 +51,7 @@ The user must three parameters when running from the command line:
 
 Example use:
 ```
-python3 ubx_get_cfg.py --dashcam 192.168.0.10:9090 --ublox /home/derek/gnss/gpsd-3.25/gpsd-3.25/clients/ubxtool --name active
+python3 ubx_get_cfg.py --dashcam 192.168.0.10:9090 --ublox /home/derekhive/gnss/gpsd-3.25/gpsd-3.25/clients/ubxtool --name active
 ```
 
 ### Compare Two U-blox Configurations
