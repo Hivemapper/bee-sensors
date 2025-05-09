@@ -365,12 +365,10 @@ class S3BucketBrowser:
         # === 2. Count how many SN devices failed ===
         failed_sn_count = fail_result["sn"].nunique()
         print(f"Number of devices that failed: {failed_sn_count}")
-        print(f"Devices that failed: {fail_result['sn'].unique()}")
 
         # === 3. Count how many devices were tested multiple times ===
         multiple_tests_count = (self.data[self.data["test_result"] != "no_log"]["sn"].value_counts() > 1).sum()
         print(f"Number of devices tested multiple times: {multiple_tests_count}")
-        print(f"Devices tested multiple times: {self.data[self.data['test_result'] != 'no_log']['sn'].value_counts()[self.data[self.data['test_result'] != 'no_log']['sn'].value_counts() > 1].index.tolist()}")
 
         # === 4. Plot distributions for pass/fail ===
         # Convert numeric columns
@@ -391,12 +389,14 @@ class S3BucketBrowser:
         ax.set_title(title)
         ax.legend()
         plt.tight_layout()
+        fig.savefig(os.path.join(self.dir_name,"avg_position_error_pass.png"))
 
 
         # === Extract TTFF values into separate columns ===
         def extract_ttff(row, index):
             try:
                 vals = ast.literal_eval(row)
+                vals = [float(v) for v in vals if float(v) > 1]
                 return vals[index]
             except:
                 return np.nan
@@ -498,8 +498,16 @@ class S3BucketBrowser:
 
         # Group devices tested multiple times
         grouped = logged_data.groupby("sn")
+        never_passed_devices = [sn for sn, results in grouped if all(r != "pass" for r in results['test_result'].tolist())]
+        print(f"Number of devices that never had a pass test (including singles): {len(never_passed_devices)}")
+        print("never_passed_devices:", never_passed_devices)
+
         tested_multiple_times = grouped.filter(lambda x: len(x) > 1)
         device_groups = tested_multiple_times.groupby("sn")
+
+        # Count and print how many devices never had a pass test
+        never_passed_devices = [sn for sn, results in device_groups if all(r != "pass" for r in results['test_result'].tolist())]
+        print(f"Number of devices that never had a pass test (after multiple attempts): {len(never_passed_devices)}")
 
         # Classify devices
         categories = {
@@ -563,9 +571,6 @@ class S3BucketBrowser:
 
         # Get unique dirs that have no logs
         no_log_dirs = no_log_data["dir"]
-        print(len(no_log_dirs), "dirs without logs")
-        print(no_log_data["dir"].nunique())
-
 
         # Download each DB
         for dir in no_log_dirs:
@@ -642,7 +647,9 @@ class S3BucketBrowser:
 
             self.perform_gnss_qa(os.path.join(dir_name,sensor_file), dir)
 
-            self.save_data_to_csv()
+
+            if d_idx % 10 == 0:
+                self.save_data_to_csv()
 
     def perform_gnss_qa(self, sensor_file, dir):
         # Perform GNSS QA on the downloaded DB
@@ -682,9 +689,13 @@ class S3BucketBrowser:
                 logs["gnss"] = None
 
             if os.path.exists(csv_path):
-                df = pd.read_csv(csv_path)
-                logs["gnss"] = df
-                print(f"Loaded {len(df)} rows from gnss fallback CSV.")
+                try:
+                    df = pd.read_csv(csv_path)
+                    logs["gnss"] = df
+                    print(f"Loaded {len(df)} rows from gnss fallback CSV.")
+                except Exception as e:
+                    print(f"CSV fallback error: {e}")
+                    logs["gnss"] = None
             else:
                 print("CSV fallback failed: file not created.")
                 logs["gnss"] = None
@@ -722,9 +733,13 @@ class S3BucketBrowser:
                 logs["nav_pvt"] = None
 
             if os.path.exists(csv_path):
-                df = pd.read_csv(csv_path)
-                logs["nav_pvt"] = df
-                print(f"Loaded {len(df)} rows from gnss fallback CSV.")
+                try:
+                    df = pd.read_csv(csv_path)
+                    logs["nav_pvt"] = df
+                    print(f"Loaded {len(df)} rows from nav_pvt fallback CSV.")
+                except Exception as e:
+                    print(f"CSV fallback error: {e}")
+                    logs["nav_pvt"] = None
             else:
                 print("CSV fallback failed: file not created.")
                 logs["nav_pvt"] = None
@@ -763,9 +778,13 @@ class S3BucketBrowser:
                 logs["nav_status"] = None
 
             if os.path.exists(csv_path):
-                df = pd.read_csv(csv_path)
-                logs["nav_status"] = df
-                print(f"Loaded {len(df)} rows from gnss fallback CSV.")
+                try:
+                    df = pd.read_csv(csv_path)
+                    logs["nav_status"] = df
+                    print(f"Loaded {len(df)} rows from nav_status fallback CSV.")
+                except Exception as e:
+                    print(f"CSV fallback error: {e}")
+                    logs["nav_status"] = None
             else:
                 print("CSV fallback failed: file not created.")
                 logs["nav_status"] = None
@@ -813,7 +832,7 @@ class S3BucketBrowser:
         # Get the first nonzero group
         first_nonzero_group = next(iter(groups))
 
-        seen_values = first_nonzero_group[1]['satellites_seen']
+        seen_values = df[df['latitude'] != 0]['satellites_seen']
         min_rolling = seen_values.rolling(window=5, min_periods=5).min().shift(-4)
 
         if max(min_rolling) >= 15:
@@ -835,7 +854,7 @@ class S3BucketBrowser:
         # Get the first nonzero group
         first_nonzero_group = next(iter(groups))
 
-        values = first_nonzero_group[1]['satellites_used']
+        values = df[df['latitude'] != 0]['satellites_used']
         min_rolling = values.rolling(window=5, min_periods=5).min().shift(-4)
 
         if max(min_rolling) >= 5:
@@ -857,7 +876,7 @@ class S3BucketBrowser:
         # Get the first nonzero group
         first_nonzero_group = next(iter(groups))
 
-        values = first_nonzero_group[1]['cno']
+        values = df[df['latitude'] != 0]['cno']
         min_rolling = values.rolling(window=5, min_periods=5).min().shift(-4)
 
         if max(min_rolling) >= 30:
@@ -879,11 +898,11 @@ class S3BucketBrowser:
         # Get the first nonzero group
         first_nonzero_group = next(iter(groups))
 
-        values = first_nonzero_group[1]['rf_jam_ind']
-        
+        values = df[df['latitude'] != 0]['rf_jam_ind']
+        max_index = min(len(values), 300)
         if (values < 250).mean() >= 0.99:
-            return True, str(values.tolist())
-        return False, str(values.tolist())
+            return True, str(values.tolist()[:max_index])
+        return False, str(values.tolist()[:max_index])
     
     def evaluate_position_error(self, df):
         if df is None:
@@ -900,9 +919,9 @@ class S3BucketBrowser:
         # Get the first nonzero group
         first_nonzero_group = next(iter(groups))
 
-        lats = first_nonzero_group[1]['lat_deg']
-        lons = first_nonzero_group[1]['lon_deg']
-        alts = first_nonzero_group[1]['hmsl_m']
+        lats = df[df['lat_deg'] != 0]['lat_deg']
+        lons = df[df['lat_deg'] != 0]['lon_deg']
+        alts = df[df['lat_deg'] != 0]['hmsl_m']
 
         true_ecef = self._geodetic_to_ecef(np.array([(40.54584991471907 ,  -79.82566018301341, 260. )]))
         test_ecef = self._geodetic_to_ecef(np.array([lats,
@@ -1015,26 +1034,35 @@ if __name__ == "__main__":
     bucket = S3BucketBrowser("hb-calib-assets-2025", 'us-west-2')
 
     # parse GNSS directories
-    # bucket.parse_gnss_directories()
-    # bucket.load_data_from_csv("/home/derekhive/bee-sensors/gnss/gnss_eol_meta_analysis_20250506133212.csv")
-    bucket.load_data_from_csv("/home/derekhive/bee-sensors/results/gnss_eol_meta_analysis/gnss_eol_meta_analysis_20250506151536.csv")
-    # print("Parsed GNSS directories:\n", bucket.data)
+    bucket.parse_gnss_directories()
     # clean data entries
-    # bucket.clean_data_entries()
+    bucket.clean_data_entries()
+    
+    
+    # bucket.load_data_from_csv("/home/derekhive/bee-sensors/gnss/gnss_eol_meta_analysis_20250506133212.csv")
+    # bucket.load_data_from_csv("/home/derekhive/bee-sensors/results/gnss_eol_meta_analysis/gnss_eol_meta_analysis_20250506151536.csv")
+    # with reruns
+    # bucket.load_data_from_csv("/home/derekhive/bee-sensors/results/gnss_eol_meta_analysis/gnss_eol_meta_analysis_20250508181602.csv")
+    
+    # partial 2nd run with any nonzero check
+    # bucket.load_data_from_csv("/home/derekhive/bee-sensors/results/gnss_eol_meta_analysis/gnss_eol_meta_analysis_20250509123901.csv")
+    # full rerun without any nonzero checks
+    # bucket.load_data_from_csv("/home/derekhive/bee-sensors/results/gnss_eol_meta_analysis/gnss_eol_meta_analysis_20250509125448.csv")
 
     # download all DBs without logs
-    test_columns = ['sats_seen', 'sats_used', 'position_error', 'cno', 'cw_jamming', 'fsync']
-    bucket.data["has_log"] = bucket.data[test_columns].notna().any(axis=1)
-    # bucket.download_dbs_without_logs()
+    test_columns = ['sats_seen', 'sats_used', 'position_error', 'cno', 'cw_jamming']
+    bucket.data["has_log"] = bucket.data[test_columns].notna().all(axis=1)
+    
+    bucket.download_dbs_without_logs()
 
     bucket.rerun_no_log_analysis()
     
     # # analyze users
-    # bucket.analyze_users()
+    bucket.analyze_users()
 
     # # meta analysis
-    # bucket.meta_analysis()
-    # bucket.save_data_to_csv()
+    bucket.meta_analysis()
+    bucket.save_data_to_csv()
 
-    # plt.show()
+    plt.show()
 
