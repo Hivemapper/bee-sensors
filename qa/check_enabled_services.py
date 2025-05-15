@@ -62,6 +62,7 @@ def check_enabled_services(include_enabled_lte_check: bool = True):
                          "depthai_gate",
                          "hivemapper-data-logger",
                          "hivemapper-folder-purger",
+                         "lte",
                          "map-ai",
                          "odc-api",
                          "redis",
@@ -74,9 +75,9 @@ def check_enabled_services(include_enabled_lte_check: bool = True):
                         ]
     
     if include_enabled_lte_check:
-        required_services.append("lte")
+        required_services.append("beekeeper-plugin")
     else:
-        disabled_services.append("lte")    
+        disabled_services.append("beekeeper-plugin")    
 
     enabled_services = get_enabled_services()
     for service in required_services:
@@ -212,12 +213,6 @@ def main():
         build_info = json.load(file)
     firmware_version = build_info["odc-version"]
 
-    if geq(firmware_version, "5.4.19"):
-        db_path = get_json_config("ODC_API_DB_PATH")
-        plugin_name = "beekeeper-plugin"
-        state = "enabled"
-        enable_bk(db_path, plugin_name, state)
-
     # Check if Wi-Fi-only/no LTE expected on unit:
     lte_present: bool = True
     with open("/data/lte_name") as file:
@@ -225,10 +220,16 @@ def main():
     if "none" in lte_name.lower():
         lte_present = False
     
+    test_LTE()
     if lte_present:
         print("Re-enabling and testing LTE:")
-        test_LTE()
         lte_capture_check()
+
+        if geq(firmware_version, "5.4.19"):
+            db_path = get_json_config("ODC_API_DB_PATH")
+            plugin_name = "beekeeper-plugin"
+            state = "enabled"
+            enable_bk(db_path, plugin_name, state)
     else:
         print("WiFi only unit. Not testing or re-enabling LTE service")
         
