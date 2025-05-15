@@ -55,24 +55,29 @@ def get_enabled_services():
         raise Exception(f"Error running systemctl: {result.stderr}")
 
 
-def check_enabled_services():
+def check_enabled_services(include_enabled_lte_check: bool = True):
     """Checks if the required services are enabled."""
 
     required_services = [
                          "depthai_gate",
                          "hivemapper-data-logger",
                          "hivemapper-folder-purger",
-                         "lte",
                          "map-ai",
                          "odc-api",
                          "redis",
                          "redis-handler",
                          "cpu-mem-logger",
                          ]
-    
+
     disabled_services = [
                          "gnss-eol-test",
                         ]
+    
+    if include_enabled_lte_check:
+        required_services.append("lte")
+    else:
+        disabled_services.append("lte")    
+
     enabled_services = get_enabled_services()
     for service in required_services:
         service_name = f"{service}.service"
@@ -88,7 +93,7 @@ def check_enabled_services():
             print(f"[PASS] Service {service} is disabled.")
 
 
-def lte_file_check():
+def lte_capture_check():
     """Checks for OK responses from initial AT commands for modem config"""
     command_set_check = ["'AT#USBCFG?'",
                          "'AT+GMM'"]
@@ -213,11 +218,22 @@ def main():
         state = "enabled"
         enable_bk(db_path, plugin_name, state)
 
-    print("Re-enabling and testing LTE:")
-    test_LTE()
-    lte_file_check()
+    # Check if Wi-Fi-only/no LTE expected on unit:
+    lte_present: bool = True
+    with open("/data/lte_name") as file:
+        lte_name = file.read()
+    if "none" in lte_name.lower():
+        lte_present = False
+    
+    if lte_present:
+        print("Re-enabling and testing LTE:")
+        test_LTE()
+        lte_capture_check()
+    else:
+        print("WiFi only unit. Not testing or re-enabling LTE service")
+        
     print("Checking all services:")
-    check_enabled_services()
+    check_enabled_services(include_enabled_lte_check=lte_present)
 
 if __name__ == "__main__":
     main()
