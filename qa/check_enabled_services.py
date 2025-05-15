@@ -55,6 +55,8 @@ def get_enabled_services():
         raise Exception(f"Error running systemctl: {result.stderr}")
 
 
+# TODO (Niessl) 2025-05-15 - Add OS version as parameter here if
+# service architecture handling wifi/LTE changes in the future 
 def check_enabled_services(include_enabled_lte_check: bool = True):
     """Checks if the required services are enabled."""
 
@@ -217,12 +219,13 @@ def main():
     lte_present: bool = True
     with open("/data/lte_name") as file:
         lte_name = file.read()
-    if "none" in lte_name.lower():
-        lte_present = False
+        if "none" in lte_name.lower():
+            lte_present = False
     
+    print("Enabling LTE service")
     test_LTE()
     if lte_present:
-        print("Re-enabling and testing LTE:")
+        print("Checking LTE capture:")
         lte_capture_check()
 
         if geq(firmware_version, "5.4.19"):
@@ -231,7 +234,7 @@ def main():
             state = "enabled"
             enable_bk(db_path, plugin_name, state)
     else:
-        print("WiFi only unit. Not testing or re-enabling LTE service")
+        print("WiFi only unit. Will not check LTE capture.")
         
     print("Checking all services:")
     check_enabled_services(include_enabled_lte_check=lte_present)
