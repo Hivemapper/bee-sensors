@@ -76,10 +76,8 @@ def check_enabled_services(include_enabled_lte_check: bool = True):
                          "gnss-eol-test",
                         ]
     
-    if include_enabled_lte_check:
-        required_services.append("beekeeper-plugin")
-    else:
-        disabled_services.append("beekeeper-plugin")    
+    if not include_enabled_lte_check:
+        disabled_services.append("beekeeper-plugin")
 
     enabled_services = get_enabled_services()
     for service in required_services:
