@@ -35,7 +35,23 @@ STATES = [
 
 def compute_results():
     comparisons = [
-        "",
+                    # "20250206_qr_ned",
+                    # "20250206_constant_heading",
+                    # "bee_2025_02_08_test_swerve",
+                    # "bee_2025_02_08_1P000822",
+                    # "bee_2025_02_08_1P000328",
+                    # "",
+                    # "bee_2025_02_11_CTP001",
+                    # "bee_2025_02_11_CTP001_replayed",
+                    # "bee_2025_02_12_CTP001",
+                    # "bee_2025_02_18_1P000822",
+                    # "bee_5-2-17_Masaya",
+                    # "bee_2025_02_19_1P000822",
+                    # "bee_2025_02_21_1P000328",
+                    # "bee_2025_02_21_P1007",
+                    # "bee_2025_02_21_FebProto01",
+                    # "bee_2024_02_24_1P000328",
+                    "bee_2025_06_04_FebProto01"
                    ]
     logs, _, _ = parse_database(comparisons)
 
@@ -71,9 +87,6 @@ def parse_database(date_dirs):
             "landmarks" : [],
             "nav_status" : [],
             "fusion_filtered" : [],
-            "fusion_gnss" : [],
-            "sensors_gnss" : [],
-            "fusion_gnss" : [],
             "logger_gnss" : [],
             "sensors_nav_pvt" : [],
             "odc_packed_fmkms" : [],
@@ -92,8 +105,6 @@ def parse_database(date_dirs):
             "landmarks" : {},
             "nav_status" : {},
             "fusion_filtered" : {},
-            "sensors_gnss" : {},
-            "fusion_gnss"  : {},
             "logger_gnss"  : {},
             "sensors_nav_pvt"  : {},
             "odc_packed_fmkms"  : {},
@@ -119,8 +130,6 @@ def parse_database(date_dirs):
         metrics["drivepath"][date_dir] = {}
         metrics["nav_status"][date_dir] = {}
         metrics["fusion_filtered"][date_dir] = {}
-        metrics["sensors_gnss"][date_dir] = {}
-        metrics["fusion_gnss"][date_dir] = {}
         metrics["logger_gnss"][date_dir] = {}
         metrics["sensors_nav_pvt"][date_dir] = {}
         metrics["odc_packed_fmkms"][date_dir] = {}
@@ -133,19 +142,6 @@ def parse_database(date_dirs):
     # Connect to the database
         conn = sqlite3.connect(fusion_path)
         print(fusion_path)
-        # add gnss
-        df = pd.read_sql_query("SELECT * FROM gnss", conn)
-        if len(df) == 0:
-            logs["fusion_gnss"].append(pd.DataFrame())
-        else:
-            metrics["fusion_gnss"][date_dir]["% rows w/o GNSS lock"] = np.round(100.0 * float(len(df[df["latitude"] == 0.0])) / len(df),2)
-        if len(df) == 0:
-            logs["fusion_gnss"].append(pd.DataFrame())
-        else:
-            outside_bay_count = len(df[(df["latitude"] < 37.0) | (df["latitude"] > 37.9) | (df["longitude"] < -122.6) | (df["longitude"] > -121.6)])
-            metrics["fusion_gnss"][date_dir]["% rows w/ fix outside of Bay"] = np.round((float(outside_bay_count)/len(df)) * 100,2)
-            gnss_sessions = df["session"].unique()
-            logs["fusion_gnss"].append(df)
         # add fusion_filtered
         try:
             df = pd.read_sql_query("SELECT * FROM filtered", conn)
@@ -155,7 +151,7 @@ def parse_database(date_dirs):
             logs["fusion_filtered"].append(None)
         # add filtered
         try:
-            df = pd.read_sql_query("SELECT * FROM gnss_concise", conn)
+            df = pd.read_sql_query("SELECT * FROM gnss", conn)
             logs["fusion_gnss_concise"].append(df)
         except Exception as e:
             print(f"fusion_gnss_concise db error: {e}")
@@ -175,7 +171,6 @@ def parse_database(date_dirs):
         # add nav_pvt
         try:
             df = pd.read_sql_query("SELECT * FROM nav_pvt", conn)
-            df = df[df["session"].isin(gnss_sessions)]
             logs["nav_pvt"].append(df)
         except Exception as e:
             print(f"nav_pvt db error: {e}")
@@ -184,7 +179,6 @@ def parse_database(date_dirs):
         # add nav_status
         try:
             df = pd.read_sql_query("SELECT * FROM nav_status", conn)
-            df = df[df["session"].isin(gnss_sessions)]
             logs["nav_status"].append(df)
         except Exception as e:
             print(f"nav_status db error: {e}")
@@ -192,7 +186,6 @@ def parse_database(date_dirs):
         # add imu
         try:
             df = pd.read_sql_query("SELECT * FROM imu", conn)
-            df = df[df["session"].isin(gnss_sessions)]
             logs["sensors_imu"].append(df)
         except Exception as e:
             print(f"sensors_imu db error: {e}")
@@ -295,8 +288,8 @@ def plot_fusion_map(logs, comparisons):
                                                                                          df_temp["longitude"],
                                                                                          df_temp["heading"])
                 temp = glp.NavData(pandas_df=df_temp)
-                temp.rename({"latitude":"lat_" + f"nav_pvt_{comparisons[ii]}" + "_deg",
-                            "longitude":"lon_" + f"nav_pvt_{comparisons[ii]}" + "_deg",
+                temp.rename({"latitude":"lat_" + f"gnss_{comparisons[ii]}" + "_deg",
+                            "longitude":"lon_" + f"gnss_{comparisons[ii]}" + "_deg",
                             }, inplace=True)
                 gnss_sessions.append(temp)
 
