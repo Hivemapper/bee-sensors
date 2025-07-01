@@ -476,7 +476,9 @@ class SensorReplay():
     def run_map_ai_handshake(self):
 
         # push timestamp to MapAiStarted
-        redis_client = redis.StrictRedis(host=self.redis_host, port=self.redis_port, decode_responses=True)
+        redis_client = redis.StrictRedis(host=self.redis_host, 
+                                         port=self.redis_port,
+                                         decode_responses=False)
 
         self.push_to_redis(str(self.uptime_milliseconds()),"MapAiStarted")
 
