@@ -1,0 +1,573 @@
+""" Plot replayed data nicely.
+
+# Source for fill between:
+https://github.com/betaBison/aa273/blob/main/hw7/p2_ekf_slam.py
+
+"""
+
+import os
+import warnings
+import subprocess
+
+import sqlite3
+import numpy as np
+import pandas as pd
+import gnss_lib_py as glp
+import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+
+warnings.simplefilter(action='ignore', category=pd.errors.SettingWithCopyWarning)
+
+DB_DIRECTORY_PATH = "/data/recording/redis_handler/"
+SENSORS_DB_NAME = "sensors"
+FUSION_DB_NAME = "fusion"
+ODC_API_DB_NAME = "odc-api"
+STATES = [
+          ["ecef_x_m",   "pos_cov_x_x","q00","r00"],
+          ["ecef_y_m",   "pos_cov_y_y","q11","r11"],
+          ["ecef_z_m",   "pos_cov_z_z","q22","r22"],
+          ["ecef_vx_m_s","vel_cov_x_x","q33","r33"],
+          ["ecef_vy_m_s","vel_cov_y_y","q44","r44"],
+          ["ecef_vz_m_s","vel_cov_z_z","q55","r55"],
+        #   ["course_deg","","",""],
+          ]
+
+
+def compute_results():
+    comparisons = [
+                    # "20250206_qr_ned",
+                    # "20250206_constant_heading",
+                    # "bee_2025_02_08_test_swerve",
+                    # "bee_2025_02_08_1P000822",
+                    # "bee_2025_02_08_1P000328",
+                    # "",
+                    # "bee_2025_02_11_CTP001",
+                    # "bee_2025_02_11_CTP001_replayed",
+                    # "bee_2025_02_12_CTP001",
+                    # "bee_2025_02_18_1P000822",
+                    # "bee_5-2-17_Masaya",
+                    # "bee_2025_02_19_1P000822",
+                    # "bee_2025_02_21_1P000328",
+                    # "bee_2025_02_21_P1007",
+                    # "bee_2025_02_21_FebProto01",
+                    # "bee_2024_02_24_1P000328",
+                    # "bee_2025_06_04_FebProto01"
+                    "bee_2025_06_09_FebProto01"
+                   ]
+    
+    session_name = "de16bc79"
+    logs, _, _ = parse_database(comparisons, session_name)
+
+
+    plot_fusion_map(logs,comparisons)
+
+    # plot_states_with_covariance(logs["fusion_filtered"],comparisons)
+
+    # plot_acc_gyro_values(logs,comparisons)
+
+    plt.show()
+
+
+"""Parse Databases"""
+
+def recover_sqlite_db(corrupt_db_path, recovered_db_path):
+    """
+    Recovers a corrupt SQLite database using the .recover command.
+    """
+
+    try:
+        subprocess.run(f"sqlite3 {corrupt_db_path} .recover | sqlite3 {recovered_db_path}", shell=True, check=True)
+        print("Database recovered successfully.")
+    except subprocess.CalledProcessError as e:
+        print("Error during recovery:", e)
+
+def parse_database(date_dirs, session_name):
+
+    logs = {
+            "gnss" : [],
+            "nav_pvt" : [],
+            "drivepath" : [],
+            "landmarks" : [],
+            "nav_status" : [],
+            "fusion_filtered" : [],
+            "logger_gnss" : [],
+            "sensors_nav_pvt" : [],
+            "odc_packed_fmkms" : [],
+            "landmarks"  : [],
+            "fusion_filtered" : [],
+            "fusion_gnss_concise" : [],
+            "sensors_nav_posecef" : [],
+            "sensors_imu" : [],
+            "fusion_imu" : [],
+            "ai_thresholds" : [],
+            "frame_metadata" : [],
+
+            }
+    metrics = {
+            "gnss" : {},
+            "nav_pvt" : {},
+            "drivepath" : {},
+            "landmarks" : {},
+            "nav_status" : {},
+            "fusion_filtered" : {},
+            "logger_gnss"  : {},
+            "sensors_nav_pvt"  : {},
+            "odc_packed_fmkms"  : {},
+            "landmarks"  : {},
+            "fusion_filtered" : {},
+            "fusion_gnss_concise" : {},
+            "sensors_imu" : {},
+            "fusion_imu" : {},
+            }
+
+    for date_dir in sorted(date_dirs):
+        print(f"analyzing {date_dir}")
+
+        sensors_file = [x for x in os.listdir(os.path.join(DB_DIRECTORY_PATH,date_dir)) if ((x[-3:] == ".db") and (SENSORS_DB_NAME in x))][0]
+        sensors_path = os.path.join(DB_DIRECTORY_PATH,date_dir,sensors_file)
+
+        fusion_file = [x for x in os.listdir(os.path.join(DB_DIRECTORY_PATH,date_dir)) if ((x[-3:] == ".db") and (FUSION_DB_NAME in x))][0]
+        fusion_path = os.path.join(DB_DIRECTORY_PATH,date_dir,fusion_file)
+
+        odc_db_file = [x for x in os.listdir(os.path.join(DB_DIRECTORY_PATH,date_dir)) if ((x[-3:] == ".db") and (ODC_API_DB_NAME in x))][0]
+        odc_db_path = os.path.join(DB_DIRECTORY_PATH,date_dir,odc_db_file)
+
+        metadata_file = [x for x in sorted(os.listdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..","results"))) if ((x[-4:] == ".csv") and (f"{session_name}_frame_metadata" in x))][-1]
+        metadata_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..","results",metadata_file)
+
+        metrics["gnss"][date_dir] = {}
+        metrics["nav_pvt"][date_dir] = {}
+        metrics["landmarks"][date_dir] = {}
+        metrics["drivepath"][date_dir] = {}
+        metrics["nav_status"][date_dir] = {}
+        metrics["fusion_filtered"][date_dir] = {}
+        metrics["logger_gnss"][date_dir] = {}
+        metrics["sensors_nav_pvt"][date_dir] = {}
+        metrics["odc_packed_fmkms"][date_dir] = {}
+        metrics["landmarks"][date_dir] = {}
+        metrics["fusion_filtered"][date_dir] = {}
+        metrics["fusion_gnss_concise"][date_dir] = {}
+        metrics["sensors_imu"][date_dir] = {}
+        metrics["fusion_imu"][date_dir] = {}
+
+    # Connect to the database
+        conn = sqlite3.connect(fusion_path)
+        print(fusion_path)
+        # add fusion_filtered
+        try:
+            df = pd.read_sql_query(f"SELECT * FROM filtered WHERE session = '{session_name}'", conn)
+            logs["fusion_filtered"].append(df)
+        except Exception as e:
+            print(f"fusion_filtered db error: {e}")
+            logs["fusion_filtered"].append(None)
+        # add filtered
+        try:
+            df = pd.read_sql_query(f"SELECT * FROM gnss WHERE session = '{session_name}'", conn)
+            logs["fusion_gnss_concise"].append(df)
+        except Exception as e:
+            print(f"fusion_gnss_concise db error: {e}")
+            logs["fusion_gnss_concise"].append(None)
+        try:
+            df = pd.read_sql_query(f"SELECT * FROM imu WHERE session = '{session_name}'", conn)
+            logs["fusion_imu"].append(df)
+        except Exception as e:
+            print(f"fusion_imu db error: {e}")
+            logs["fusion_imu"].append(None)
+
+        # Close the connection
+        conn.close()
+
+        # Connect to the database
+        conn = sqlite3.connect(sensors_path)
+        # add nav_pvt
+        try:
+            df = pd.read_sql_query(f"SELECT * FROM nav_pvt WHERE session = '{session_name}'", conn)
+            logs["nav_pvt"].append(df)
+        except Exception as e:
+            print(f"nav_pvt db error: {e}")
+            logs["nav_pvt"].append(None)
+
+        # add nav_status
+        try:
+            df = pd.read_sql_query(f"SELECT * FROM nav_status WHERE session = '{session_name}'", conn)
+            logs["nav_status"].append(df)
+        except Exception as e:
+            print(f"nav_status db error: {e}")
+            logs["nav_status"].append(None)
+        # add imu
+        try:
+            df = pd.read_sql_query(f"SELECT * FROM imu WHERE session = '{session_name}'", conn)
+            logs["sensors_imu"].append(df)
+        except Exception as e:
+            print(f"sensors_imu db error: {e}")
+            logs["sensors_imu"].append(None)
+        conn.close()
+
+        # Connect to the database
+        conn = sqlite3.connect(odc_db_path)
+        # add nav_pvt
+        try:
+            df = pd.read_sql_query(f"SELECT * FROM packed_framekms", conn)
+            logs["odc_packed_fmkms"].append(df)
+        except Exception as e:
+            print(f"odc_packed_fmkms db error: {e}")
+            logs["odc_packed_fmkms"].append(None)
+
+        conn.close()
+
+    thresholds_file = [x for x in os.listdir(os.path.join(DB_DIRECTORY_PATH,date_dir)) if ((x[-4:] == ".csv") and ("ai_thresholds_log" in x))]
+    if len(thresholds_file) > 0:
+        thresholds_file = thresholds_file[0]
+        thresholds_path = os.path.join(DB_DIRECTORY_PATH,date_dir,thresholds_file)
+        df = pd.read_csv(thresholds_path)
+        logs["ai_thresholds"].append(df)
+    else:
+        logs["ai_thresholds"].append(None)
+
+    logs["frame_metadata"].append(pd.read_csv(metadata_path))
+
+    return logs, metrics, date_dirs
+
+def generate_ellipses(df, type="cov", num_points=100, sigma=3):
+    """
+    Vectorized function to generate covariance ellipses for multiple points in a DataFrame.
+
+    Parameters:
+        df (pd.DataFrame): DataFrame with columns ['lat', 'lon', 'cov_11', 'cov_12', 'cov_22']
+        num_points (int): Number of points for the ellipse perimeter
+
+    Returns:
+        dict: Mapping (lat, lon) -> (lat_ellipse, lon_ellipse)
+    """
+    earth_radius = 6378137  # Radius of Earth in meters
+
+    if type == "cov":
+        # Create covariance matrices
+        cov_matrices = np.array([
+            [[row.pos_cov_n_n, row.pos_cov_n_e],
+             [row.pos_cov_n_e, row.pos_cov_e_e]]
+            for _, row in df.iterrows()
+        ])
+    elif type == "Q":
+        # Create covariance matrices
+        cov_matrices = np.array([
+            [[row.q_cov_n_n, row.q_cov_n_e],
+             [row.q_cov_n_e, row.q_cov_e_e]]
+            for _, row in df.iterrows()
+        ])
+    elif type == "R":
+        # Create covariance matrices
+        cov_matrices = np.array([
+            [[row.r_cov_n_n, row.r_cov_n_e],
+             [row.r_cov_n_e, row.r_cov_e_e]]
+            for _, row in df.iterrows()
+        ])
+
+    # Eigen decomposition
+    eigenvalues, eigenvectors = np.linalg.eigh(cov_matrices)
+
+    # Scale by sigma (3-sigma for 99.7% confidence)
+    scaled_eigenvalues = np.sqrt(eigenvalues) * sigma
+
+    # Generate unit circle points
+    theta = np.linspace(0, 2 * np.pi, num_points)
+    unit_circle = np.array([np.cos(theta), np.sin(theta)])  # Shape: (2, num_points)
+    scaled_unit_circle = (scaled_eigenvalues[..., None] * unit_circle[None, :, :])  # (45875, 2, 100)
+    ellipses = np.einsum('...ij,...jk->...ik', eigenvectors, scaled_unit_circle)  # CORRECT
+
+
+    # Convert north/east displacements to lat/lon displacements
+    dlat = ellipses[:, 0, :] / earth_radius * (180 / np.pi)
+    dlon = ellipses[:, 1, :] / (earth_radius * np.cos(np.radians(df['lat_deg'].values[:, None]))) * (180 / np.pi)
+
+    # Compute final lat/lon for each ellipse
+    lat_ellipses = df['lat_deg'].values[:, None] + dlat
+    lon_ellipses = df['lon_deg'].values[:, None] + dlon
+
+    # Convert to lists and add `None` separator for fast plotting
+    lat_list = []
+    lon_list = []
+    for i in range(len(df)):
+        lat_list.extend(lat_ellipses[i].tolist() + [None])  # Add `None` to separate ellipses
+        lon_list.extend(lon_ellipses[i].tolist() + [None])
+
+    return lat_list, lon_list
+
+
+def plot_fusion_map(logs, comparisons):
+    for ii,logger_drivepath in enumerate(logs["fusion_gnss_concise"]):
+        gnss_sessions = []
+
+        if logger_drivepath is None or len(logger_drivepath) == 0:
+            continue
+        
+        if logs["fusion_gnss_concise"][ii] is not None:
+            df_temp = logs["fusion_gnss_concise"][ii][logs["fusion_gnss_concise"][ii]["latitude"] != 0.0]
+            if len(df_temp) > 0:
+                df_temp = df_temp[["latitude","longitude","heading"]]
+                gnss_concise_heading_lats, gnss_concise_heading_lons = get_heading_lines(df_temp["latitude"],
+                                                                                         df_temp["longitude"],
+                                                                                         df_temp["heading"])
+                temp = glp.NavData(pandas_df=df_temp)
+                temp.rename({"latitude":"lat_" + f"gnss_{comparisons[ii]}" + "_deg",
+                            "longitude":"lon_" + f"gnss_{comparisons[ii]}" + "_deg",
+                            }, inplace=True)
+                gnss_sessions.append(temp)
+
+        if logs["odc_packed_fmkms"][ii] is not None:
+            df_temp = logs["odc_packed_fmkms"][ii]
+            if len(df_temp) > 0:
+                df_temp = df_temp[["latitude","longitude","heading"]]
+                odc_heading_lats, odc_heading_lons = get_heading_lines(df_temp["latitude"],
+                                                                                         df_temp["longitude"],
+                                                                                         df_temp["heading"],8.)
+                temp = glp.NavData(pandas_df=df_temp)
+                temp.rename({"latitude":"lat_" + f"odc_{comparisons[ii]}" + "_deg",
+                            "longitude":"lon_" + f"odc_{comparisons[ii]}" + "_deg",
+                            }, inplace=True)
+                gnss_sessions.append(temp)
+
+        if logs["frame_metadata"][ii] is not None:
+            df_temp = logs["frame_metadata"][ii]
+            if len(df_temp) > 0:
+                df_temp = df_temp[["latitude","longitude","heading"]]
+                cpp_heading_lats, cpp_heading_lons = get_heading_lines(df_temp["latitude"],
+                                                                       df_temp["longitude"],
+                                                                       df_temp["heading"],8.)
+                temp = glp.NavData(pandas_df=df_temp)
+                temp.rename({"latitude":"lat_" + f"cpp_motion_model_{comparisons[ii]}" + "_deg",
+                            "longitude":"lon_" + f"cpp_motion_model_{comparisons[ii]}" + "_deg",
+                            }, inplace=True)
+                gnss_sessions.append(temp)
+
+        if len(gnss_sessions) > 0:
+            print("FUSION MAP")
+            fig = glp.plot_map(*gnss_sessions)
+
+            fig.add_trace(go.Scattermapbox(
+                lat=gnss_concise_heading_lats,
+                lon=gnss_concise_heading_lons,
+                mode="lines",
+                # line=dict(width=line_width),
+                name="GNSS concise heading lines"
+            ))
+            fig.add_trace(go.Scattermapbox(
+                lat=odc_heading_lats,
+                lon=odc_heading_lons,
+                mode="lines",
+                # line=dict(width=line_width),
+                name="ODC framekm heading lines"
+            ))
+            fig.add_trace(go.Scattermapbox(
+                lat=cpp_heading_lats,
+                lon=cpp_heading_lons,
+                mode="lines",
+                # line=dict(width=line_width),
+                name="C++ motion model heading lines"
+            ))
+
+            fig.update_layout(
+                autosize=False,
+                width=1800,
+                height=1000,
+            )
+            fig.show()
+
+def plot_states_with_covariance(filtered_loggers, comparisons):
+    for ii,filtered_logger in enumerate(filtered_loggers):
+        if filtered_loggers is None or len(filtered_loggers) == 0:
+            continue
+        filtered_logger["time"] = pd.to_datetime(filtered_logger["system_time"], format="mixed")
+        filtered_logger = filtered_logger[filtered_logger["pos_cov_x_x"] != 1000.0]
+
+        fig = plt.figure(figsize=(12, 8))
+        for ss, state in enumerate(STATES):
+            ax = fig.add_subplot(3, 2, ss+1)
+            ax.plot(filtered_logger["time"], filtered_logger[state[0]], label=state[0], marker="None")
+            ax.fill_between(filtered_logger["time"],
+                            filtered_logger[state[0]] - 2.*np.sqrt(filtered_logger[state[3]]),
+                            filtered_logger[state[0]] + 2.*np.sqrt(filtered_logger[state[3]]),
+                            alpha=0.5, label="R 2-$\\sigma$ Covariance")
+            ax.fill_between(filtered_logger["time"],
+                            filtered_logger[state[0]] - 2.*np.sqrt(filtered_logger[state[1]]),
+                            filtered_logger[state[0]] + 2.*np.sqrt(filtered_logger[state[1]]),
+                            alpha=0.5,label="P 2-$\\sigma$ Covariance")#, color="C"+str(ss))
+            ax.fill_between(filtered_logger["time"],
+                            filtered_logger[state[0]] - 2.*np.sqrt(filtered_logger[state[2]]),
+                            filtered_logger[state[0]] + 2.*np.sqrt(filtered_logger[state[2]]),
+                            alpha=0.5, label="Q 2-$\\sigma$ Covariance")
+            ax.set_title(state[0])
+            plt.legend()
+        plt.suptitle(f"States with Covariance {comparisons[ii]}")
+        plt.tight_layout()
+
+def plot_imu_values(log_imu):
+    """Plot accelerometer and gyroscope data.
+    
+    Parameters
+    ----------
+    log_imu : pd.DataFrame
+        Dataframe containing the imu data.    
+    
+    """
+
+    for session in log_imu["session"].unique():
+        df_temp = log_imu[log_imu["session"]==session].copy()
+        df_temp["time"] = pd.to_datetime(df_temp["time"], format="mixed")
+        df_temp["acc_total"] = (df_temp["acc_x"]**2 + df_temp["acc_y"]**2 + df_temp["acc_z"]**2)**0.5
+
+        # plot accelerometer data
+        df_temp.plot(x="time",y=["acc_x","acc_y","acc_z","acc_total"], title=f"Accelerometer Session:{session}")
+        # plot gyroscope data
+        df_temp.plot(x="time",y=["gyro_x","gyro_y","gyro_z"], title=f"Gyroscope Session:{session}")
+
+
+def plot_acc_gyro_values(logs, date_dirs):
+  for ii,logger in enumerate(logs["sensors_imu"]):
+    if logger is None:
+      continue
+
+    if logs["ai_thresholds"][ii] is not None:
+        ai_thresholds_df = logs["ai_thresholds"][ii]
+        ai_thresholds_df["time"] = pd.to_datetime(ai_thresholds_df["timestamp"], format="mixed")
+    else:
+        ai_thresholds_df = None
+
+    for session in logger["session"].unique():
+      df_temp = logger[logger["session"]==session]
+      df_temp["time"] = pd.to_datetime(df_temp["time"], format="mixed")
+      df_temp["acc_total"] = (df_temp["acc_x"]**2 + df_temp["acc_y"]**2 + df_temp["acc_z"]**2)**0.5
+
+      df_fusion = logs["fusion_imu"][ii]
+      df_fusion = df_fusion[df_fusion["session"] == session]
+      df_fusion["time"] = pd.to_datetime(df_fusion["time"], format="mixed")
+      df_fusion["acc_total"] = (df_fusion["acc_x"]**2 + df_fusion["acc_y"]**2 + df_fusion["acc_z"]**2)**0.5
+
+      plt.figure()
+      axis_ys = ["acc_z","acc_y","acc_x"]
+
+      plt.plot(df_temp["time"], df_temp["acc_x"], label="unfiltered x")
+      plt.plot(df_temp["time"], df_temp["acc_y"], label="unfiltered y")
+      plt.plot(df_temp["time"], df_temp["acc_z"], label="unfiltered z")
+      plt.plot(df_temp["time"], df_temp["acc_total"], label="unfiltered total")
+      plt.plot(df_fusion["time"], df_fusion["acc_x"], label="filtered x")
+      plt.plot(df_fusion["time"], df_fusion["acc_y"], label="filtered y")
+      plt.plot(df_fusion["time"], df_fusion["acc_z"], label="filtered z")
+      plt.plot(df_fusion["time"], df_fusion["acc_total"], label="filtered total")
+      plt.legend()
+      plt.title(f"{date_dirs[ii]} {session}")
+
+      HARSH_BRAKING_THRESHOLD = 0.72
+      AGGRESSIVE_ACCEL_THRESHOLD = 0.51
+      SWERVING_THRESHOLD = 0.5
+    
+      # harsh braking figures.
+      def min_previous_400(series):
+        return series.rolling(window=400, min_periods=1).min()
+      def max_previous_400(series):
+        return series.rolling(window=400, min_periods=1).max()
+      
+      df_fusion["braking_threshold"] = min_previous_400(df_fusion["acc_x"] + HARSH_BRAKING_THRESHOLD)
+      df_fusion["accel_threshold"] = max_previous_400(df_fusion["acc_x"] - AGGRESSIVE_ACCEL_THRESHOLD)
+
+      plt.figure()
+      plt.plot(df_temp["time"], df_temp["acc_x"], label="unfiltered x")
+      plt.plot(df_temp["time"], df_temp["acc_total"], label="unfiltered total")
+      plt.plot(df_fusion["time"], df_fusion["acc_x"], label="filtered x")
+      plt.plot(df_fusion["time"], df_fusion["acc_total"], label="filtered total")
+      plt.plot(df_fusion["time"], df_fusion["braking_threshold"], label="harsh braking threshold x",
+               color='red', linestyle='--', marker='None')
+      plt.plot(df_fusion["time"], df_fusion["accel_threshold"], label="sudden accel threshold x",
+               color='blue', linestyle='--', marker='None')
+      plt.axhline(y=(np.sqrt(1 + HARSH_BRAKING_THRESHOLD**2)), color='red', linestyle='--', label='harsh braking threshold total')
+      plt.axhline(y=(np.sqrt(1 + AGGRESSIVE_ACCEL_THRESHOLD**2)), color='blue', linestyle='--', label='sudden accel threshold total')
+      if ai_thresholds_df is not None:
+        plt.plot(ai_thresholds_df["time"], ai_thresholds_df["total_norm"], label="Logged filtered total")
+        plt.plot(ai_thresholds_df["time"], ai_thresholds_df["filtered_x"], label="Logged filtered x")
+        plt.plot(ai_thresholds_df["time"], HARSH_BRAKING_THRESHOLD + ai_thresholds_df["braking_threshold"], label="Logged braking threshold")
+        plt.plot(ai_thresholds_df["time"], ai_thresholds_df["accel_threshold"] - AGGRESSIVE_ACCEL_THRESHOLD, label="Logged ")
+      plt.legend()
+      plt.title(f"Harsh braking {date_dirs[ii]} {session}")
+
+      # swerving figures.
+      def avg_previous_6000(series):
+        return series.rolling(window=6000, min_periods=1).mean()
+      
+      df_fusion["steady_state"] = avg_previous_6000(df_fusion["acc_y"])
+      df_fusion["swerving_threshold"] = df_fusion["steady_state"] + SWERVING_THRESHOLD
+      df_fusion["end_swerving"] = df_fusion["steady_state"] + 0.25*SWERVING_THRESHOLD
+      
+      plt.figure()
+      plt.plot(df_temp["time"], df_temp["acc_y"], label="unfiltered y")
+      plt.plot(df_temp["time"], df_temp["acc_total"], label="unfiltered total")
+      plt.plot(df_fusion["time"], df_fusion["acc_y"], label="filtered y")
+      plt.plot(df_fusion["time"], np.abs(df_fusion["acc_y"] - df_fusion["steady_state"]), label="filtered y diff")
+      plt.plot(df_fusion["time"], df_fusion["acc_total"], label="filtered total")
+      plt.plot(df_fusion["time"], df_fusion["steady_state"], label="steady state y",
+               color='red', linestyle='--', marker='None')
+      plt.axhline(y=SWERVING_THRESHOLD, color='blue', linestyle='--', label='start swerving threshold')
+      plt.axhline(y=0.25*SWERVING_THRESHOLD, color='green', linestyle='--', label='end swerving threshold')
+
+      if ai_thresholds_df is not None:
+        plt.plot(ai_thresholds_df["time"], ai_thresholds_df["filtered_y"], label="Logged filtered y")
+        plt.plot(ai_thresholds_df["time"], np.abs(ai_thresholds_df["filtered_y"] - ai_thresholds_df["average_y"]), label="Logged y diff")
+      plt.legend()
+      plt.title(f"Swerving {date_dirs[ii]} {session}")
+
+      # ys = []
+      # if "acc_norm" in df_temp.columns:
+      #   ys.append("acc_norm")
+      # if "acc_norm_filtered" in df_temp.columns:
+      #   ys.append("acc_norm_filtered")
+      # if "acc_norm_filtered_colab" in df_temp.columns:
+      #   ys.append("acc_norm_filtered_colab")
+      # if len(ys) > 0:
+      #   df_temp.plot(x="time",y=ys)
+      #   plt.title(f"Accel Magnitude {date_dirs[ii]} {session}")
+
+    #   plt.figure()
+    #   df_temp.plot(x="time",y=["gyro_x","gyro_y","gyro_z"])
+      plt.title(f"{date_dirs[ii]} {session}")
+
+
+      # df_temp["gyro_norm"] = np.sqrt(df_temp['gyro_x']**2 + df_temp['gyro_y']**2 + df_temp['gyro_z']**2)
+      # df_temp.plot(x="time",y=["gyro_norm"])
+      # plt.title(f"Gyro Magnitude {date_dirs[ii]} {session}")
+
+def get_heading_lines(latitudes, longitudes, headings, line_length_meters=1):
+    """
+    Generate lines representing headings at given latitudes and longitudes.
+
+    Parameters:
+        latitudes (list): List of latitudes.
+        longitudes (list): List of longitudes.
+        headings (list): List of headings in degrees.
+        line_length_meters (float): Length of the lines in meters.
+
+    Returns:
+        tuple: Two lists containing latitude and longitude coordinates for the lines.
+    """
+
+    # Convert heading to radians (Clockwise from North)
+    headings_rad = np.radians(np.array(headings))  # Convert to counterclockwise from East
+
+    # Convert meters to degrees
+    meters_to_lat = line_length_meters / 111320  # 1 degree latitude ≈ 111.32 km
+    meters_to_lon = lambda lat: line_length_meters / (111320 * np.cos(np.radians(lat)))
+
+    # Prepare lists for line coordinates with None separators
+    line_lats, line_lons = [], []
+
+    for lat, lon, heading in zip(latitudes, longitudes, headings_rad):
+        end_lat = lat + meters_to_lat * np.cos(heading)
+        end_lon = lon + meters_to_lon(lat) * np.sin(heading)
+
+        # Append start and end coordinates, then None for breaking the line segments
+        line_lats.extend([lat, end_lat, None])
+        line_lons.extend([lon, end_lon, None])
+
+    return line_lats, line_lons
+
+
+if __name__ == "__main__":
+    compute_results()

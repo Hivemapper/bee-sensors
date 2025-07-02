@@ -9,6 +9,7 @@ Only pushes data the is after the first nav-pvt system time.
 
 """
 
+import os
 import sys
 import time
 import signal
@@ -171,7 +172,7 @@ class SensorReplay():
                 self.push_to_redis(self.serialize_nav_sat(nav_sat_rows, nav_pvt_system_time, nav_pvt_itow_ms), "NavSat")
                 self.push_to_redis(self.serialize_nav_sig(nav_pvt_system_time, nav_pvt_itow_ms), "NavSig")
                 self.push_to_redis(self.serialize_mon_rf(nav_pvt_system_time), "MonRf")
-                time.sleep(0.25)
+                time.sleep(0.1)
 
             # update to the next timestamp
             self.row_index[min_key] += 1
@@ -482,13 +483,20 @@ class SensorReplay():
 
         self.push_to_redis(str(self.uptime_milliseconds()),"MapAiStarted")
 
+        # write results to csv
+        csv_file = f"{time.strftime("%Y%m%d%H%M%S")}_{self.session}_frame_metadata.csv"
+        csv_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..","results",csv_file)
+        with open(csv_file, "w") as f:
+            f.write("latitude,longitude,altitude,heading\n")
+
         while True:
             # Handle FrameRequest → FrameChosen
             if redis_client.llen("FrameRequest") > 0:
                 val = redis_client.rpop("FrameRequest")
                 try:
                     # Add one second
-                    new_val = str(float(val) + 1.0)
+                    # new_val = str(float(val) + 1.0)
+                    new_val = str(float(val))
                     redis_client.lpush("FrameChosen", new_val)
                 except ValueError:
                     print(f"Invalid timestamp in FrameRequest: {val}")
@@ -500,7 +508,12 @@ class SensorReplay():
                     message = framemetadata.FrameMetadata()  # Replace with actual message class
                     message.ParseFromString(raw_data)
 
-                    print(message.latitude, message.longitude)
+                    # print out every field in message
+                    for field, value in message.ListFields():
+                        print(f"{field.name}: {value}")
+
+                    with open(csv_file, "a") as f:
+                        f.write(f"{message.latitude},{message.longitude},{message.altitude},{message.heading}\n")
                 else:
                     print("No data in FrameMetadata list.")
 
