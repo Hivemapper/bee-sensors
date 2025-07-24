@@ -3,6 +3,13 @@
 Setup:
 1. pip install redis pandas protobuf
 2. protoc --python_out=. sensordata.proto
+2. protoc --python_out=. framemetadata.proto
+
+On Device Replay:
+1. change the /etc/redis/redis.conf on device to
+   a. bind 127.0.0.1 192.168.197.55
+   b. protected-mode no
+2. systemctl stop/disable hivemapper-data-logger
 
 
 Only pushes data the is after the first nav-pvt system time.
@@ -18,6 +25,7 @@ import sqlite3
 import argparse
 import threading
 import subprocess
+from flask import Flask, jsonify
 
 import redis
 import numpy as np
@@ -36,21 +44,39 @@ def main():
     parser.add_argument("--sensors-db-path", type=str, default="sensors-v0-0-2.db", help="Path to the SQLite database file")
     parser.add_argument("--gnss-db-path", type=str, default="gnss-raw-v0-0-2.db", help="Path to the SQLite database file")
     parser.add_argument("--session", type=str, default="", help="Session ID to replay")
+    parser.add_argument("--on-device", action="store_true", help="Whether to replay on device")
     args = parser.parse_args()
 
-    sr = SensorReplay(args.sensors_db_path, args.gnss_db_path, args.session)
+    app = Flask(__name__)
+
+    if not args.on_device:
+        @app.route('/config/getIsLowPowerModeEnabled')
+        def low_power(): return jsonify(state=False)
+
+        flask_thread = threading.Thread(target=lambda: app.run(host='127.0.0.1', port=5000), daemon=True)
+        flask_thread.start()
+
+    sr = SensorReplay(args.sensors_db_path, args.gnss_db_path, args.session, args.on_device)
     signal.signal(signal.SIGINT, sr.handle_exit)
-    thread = threading.Thread(target=sr.run_map_ai_handshake, daemon=True)
-    thread.start()
+    if not args.on_device:
+        thread = threading.Thread(target=sr.run_map_ai_handshake, daemon=True)
+        thread.start()
     sr.run_replay()
 
 class SensorReplay():
-    def __init__(self, sensor_db_path, gnss_db_path, session = ""):
+    def __init__(self, sensor_db_path, gnss_db_path, session = "", on_device=False):
 
 
         # Redis configuration
-        self.redis_host = "127.0.0.1"
-        self.redis_port = 6379
+        self.on_device = on_device
+
+        if self.on_device:
+            self.redis_host = "192.168.197.55"
+            self.redis_port = 6379
+        else:
+            self.redis_host = "127.0.0.1"
+            self.redis_port = 6379
+
         self.redis_conf_file = "redis.conf"
         self.sensor_db_path = sensor_db_path
         self.gnss_db_path = gnss_db_path
@@ -103,17 +129,27 @@ class SensorReplay():
         self.sql_data = {}
         self.row_index = {}
         self.system_timestamps = {}
+        # custom_start_time = "2024-05-03 01:40:44.987440103" # /bee_2025_06_09_FebProto01 --session de16bc79 Leavenworth and Union stoppage
+        custom_start_time = "2024-05-03 01:26:02.89456145" # /bee_2025_06_09_FebProto01 --session de16bc79 Start of IMU data
+        custom_start_time = None
         nav_pvt_start_time = None
         nav_pvt_start_itow_ms = None
         for table in self.redis_table_to_list:
             self.sql_data[table] = self.fetch_sqlite_table(table)
             self.row_index[table] = 0
             if table in self.system_time_columns:
+                # self.sql_data[table]["sync_time"] = pd.to_datetime(self.sql_data[table][self.system_time_columns[table]],
+                #                                                    errors='coerce', format="%Y-%m-%d %H:%M:%S.%f")
                 self.sql_data[table]["sync_time"] = pd.to_datetime(self.sql_data[table][self.system_time_columns[table]],
                                                                    errors='coerce', format="%Y-%m-%d %H:%M:%S.%f")
                 self.sql_data[table] = self.sql_data[table].dropna(subset=["sync_time"])
                 if table == "nav_pvt":
-                    nav_pvt_start_time = self.sql_data[table]["sync_time"][0]
+                    if custom_start_time is not None:
+                        nav_pvt_start_time = pd.to_datetime(custom_start_time, format="%Y-%m-%d %H:%M:%S.%f")
+                        self.sql_data[table] = self.sql_data[table][self.sql_data[table]["sync_time"] >= nav_pvt_start_time]
+                        self.sql_data[table].reset_index(drop=True, inplace=True)
+                    else:
+                        nav_pvt_start_time = self.sql_data[table]["sync_time"][0]
                     nav_pvt_start_itow_ms = self.sql_data[table]["itow_ms"][0]
                 elif nav_pvt_start_time is not None:
                     self.sql_data[table] = self.sql_data[table][self.sql_data[table]["sync_time"] >= nav_pvt_start_time]
@@ -125,7 +161,8 @@ class SensorReplay():
                     self.sql_data[table] = self.sql_data[table][self.sql_data[table]["itow_ms"] >= nav_pvt_start_itow_ms]
                     self.sql_data[table].reset_index(drop=True, inplace=True)
 
-        self.start_redis_server()
+        if not self.on_device:
+            self.start_redis_server()
         self.nav_pvt_start_itow_ms = nav_pvt_start_itow_ms
 
     def adjust_itow_ms(self, itow_ms):
@@ -172,7 +209,7 @@ class SensorReplay():
                 self.push_to_redis(self.serialize_nav_sat(nav_sat_rows, nav_pvt_system_time, nav_pvt_itow_ms), "NavSat")
                 self.push_to_redis(self.serialize_nav_sig(nav_pvt_system_time, nav_pvt_itow_ms), "NavSig")
                 self.push_to_redis(self.serialize_mon_rf(nav_pvt_system_time), "MonRf")
-                time.sleep(0.1)
+                # time.sleep(0.05)
 
             # update to the next timestamp
             self.row_index[min_key] += 1
@@ -181,7 +218,8 @@ class SensorReplay():
             else:
                 self.system_timestamps[min_key] = self.sql_data[min_key]["sync_time"][self.row_index[min_key]]
 
-        self.clear_redis()
+        if not self.on_device:
+            self.clear_redis()
 
     def serialize_gnss(self, row):
         message = sensordata.GnssData()
@@ -243,6 +281,8 @@ class SensorReplay():
         message.gyroscope.y = row.gyro_y
         message.gyroscope.z = row.gyro_z
         message.temperature = row.temperature
+        message.fsync.fsync_int = row.fsync
+        message.fsync.time_delta = row.fsync_time_delta
         return message.SerializeToString()
     
     def serialize_mag(self, row):
@@ -405,9 +445,27 @@ class SensorReplay():
         return message.SerializeToString()
     
     def uptime_milliseconds(self):
-        with open("/proc/uptime", "r") as f:
-            uptime_str = f.readline().split()[0]
-            return float(uptime_str)*1000.
+
+        if self.on_device:
+            ssh_user = "root"
+            remote_ip = "192.168.197.55"
+
+            # Run the remote command via SSH
+            result = subprocess.run(
+                ["ssh", f"{ssh_user}@{remote_ip}", "-o", "StrictHostKeyChecking=no", "cat /proc/uptime"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            uptime_str = result.stdout.split()[0]
+        else:
+            with open("/proc/uptime", "r") as f:
+                uptime_str = f.readline().split()[0]
+
+        print("uptime_str:", uptime_str)
+        
+        return float(uptime_str)*1000.
     
     def serialize_mon_rf(self, nav_pvt_system_time):
         message = sensordata.MonRf()
@@ -488,7 +546,9 @@ class SensorReplay():
         csv_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..","results",csv_file)
         with open(csv_file, "w") as f:
             f.write("latitude,longitude,altitude,heading\n")
+        
 
+        count = 0
         while True:
             # Handle FrameRequest → FrameChosen
             if redis_client.llen("FrameRequest") > 0:
@@ -496,8 +556,9 @@ class SensorReplay():
                 try:
                     # Add one second
                     # new_val = str(float(val) + 1.0)
-                    new_val = str(float(val))
+                    new_val = str(max(float(val),self.uptime_milliseconds()-1000))
                     redis_client.lpush("FrameChosen", new_val)
+                    count += 1
                 except ValueError:
                     print(f"Invalid timestamp in FrameRequest: {val}")
 
@@ -509,19 +570,27 @@ class SensorReplay():
                     message.ParseFromString(raw_data)
 
                     # print out every field in message
-                    for field, value in message.ListFields():
-                        print(f"{field.name}: {value}")
+                    # for field, value in message.ListFields():
+                        # print(f"{field.name}: {value}")
+
+                    print(f"FrameMetadata: {message.metrics}")
 
                     with open(csv_file, "a") as f:
                         f.write(f"{message.latitude},{message.longitude},{message.altitude},{message.heading}\n")
                 else:
                     print("No data in FrameMetadata list.")
 
+            if count >= 100:
+                print("resetting map-ai started")
+                self.push_to_redis(str(self.uptime_milliseconds()+10000),"MapAiStarted")
+                count = 0
+
             time.sleep(0.1)
 
     def handle_exit(self, signal, frame):
         print("Clearing data on exit...")
-        self.clear_redis()
+        if not self.on_device:
+            self.clear_redis()
         sys.exit(0)
 
 if __name__ == "__main__":

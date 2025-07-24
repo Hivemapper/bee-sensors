@@ -29,4 +29,5 @@ message FrameMetadata {
     double gyro_x = 26;
     double gyro_y = 27;
     double gyro_z = 28;
+    string metrics = 29;
 }
