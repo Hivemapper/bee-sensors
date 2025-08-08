@@ -47,6 +47,8 @@ def main():
     parser.add_argument("--on-device", action="store_true", help="Whether to replay on device")
     args = parser.parse_args()
 
+    os.makedirs("/data/recording/redis_handler/", exist_ok=True)
+
     app = Flask(__name__)
 
     if not args.on_device:
@@ -209,6 +211,8 @@ class SensorReplay():
                 self.push_to_redis(self.serialize_nav_sat(nav_sat_rows, nav_pvt_system_time, nav_pvt_itow_ms), "NavSat")
                 self.push_to_redis(self.serialize_nav_sig(nav_pvt_system_time, nav_pvt_itow_ms), "NavSig")
                 self.push_to_redis(self.serialize_mon_rf(nav_pvt_system_time), "MonRf")
+                if not self.on_device:
+                    time.sleep(0.2)
                 # time.sleep(0.05)
 
             # update to the next timestamp
@@ -462,8 +466,6 @@ class SensorReplay():
         else:
             with open("/proc/uptime", "r") as f:
                 uptime_str = f.readline().split()[0]
-
-        print("uptime_str:", uptime_str)
         
         return float(uptime_str)*1000.
     
@@ -517,6 +519,7 @@ class SensorReplay():
         """Starts a Redis server as a subprocess."""
         try:
             if self.redis_conf_file:
+                print("Starting redis-server with config file:", self.redis_conf_file)
                 process = subprocess.Popen(["redis-server", self.redis_conf_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             else:
                 process = subprocess.Popen(["redis-server"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -542,10 +545,10 @@ class SensorReplay():
         self.push_to_redis(str(self.uptime_milliseconds()),"MapAiStarted")
 
         # write results to csv
-        csv_file = f"{time.strftime("%Y%m%d%H%M%S")}_{self.session}_frame_metadata.csv"
-        csv_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..","results",csv_file)
-        with open(csv_file, "w") as f:
-            f.write("latitude,longitude,altitude,heading\n")
+        # csv_file = f"{time.strftime("%Y%m%d%H%M%S")}_{self.session}_frame_metadata.csv"
+        # csv_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..","results",csv_file)
+        # with open(csv_file, "w") as f:
+        #     f.write("latitude,longitude,altitude,heading\n")
         
 
         count = 0
@@ -573,10 +576,10 @@ class SensorReplay():
                     # for field, value in message.ListFields():
                         # print(f"{field.name}: {value}")
 
-                    print(f"FrameMetadata: {message.metrics}")
+                    # print(f"FrameMetadata: {message.metrics}")
 
-                    with open(csv_file, "a") as f:
-                        f.write(f"{message.latitude},{message.longitude},{message.altitude},{message.heading}\n")
+                    # with open(csv_file, "a") as f:
+                    #     f.write(f"{message.latitude},{message.longitude},{message.altitude},{message.heading}\n")
                 else:
                     print("No data in FrameMetadata list.")
 
