@@ -156,7 +156,7 @@ def less_than(ver1, ver2):
     """ Returns true if ver1 < ver2"""
     return not geq(ver1, ver2)
 
-def get_json_config(key):
+def get_json_config(key, firmware_version):
     """Get a value from the JSON configuration file.
 
     Returns None if key is not found or 
@@ -175,6 +175,8 @@ def get_json_config(key):
     """
 
     config_file_path = "/opt/dashcam/bin/config.json"
+    if geq(firmware_version, "5.7.88"):
+        config_file_path = "/opt/dashcam/bin/db-config.json"
     try:
         with open(config_file_path, "r") as f:
             config = json.load(f)
@@ -227,7 +229,7 @@ def main():
         lte_capture_check()
 
         if geq(firmware_version, "5.4.19"):
-            db_path = get_json_config("ODC_API_DB_PATH")
+            db_path = get_json_config("ODC_API_DB_PATH", firmware_version)
             plugin_name = "beekeeper-plugin"
             state = "enabled"
             enable_bk(db_path, plugin_name, state)
