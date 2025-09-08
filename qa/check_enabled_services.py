@@ -166,6 +166,8 @@ def get_json_config(key, firmware_version):
     ----------
     key : str
         The key to get from the JSON configuration file
+    firmware_version: str
+        The firmware version, which may affect the config file path
 
     Returns
     -------
