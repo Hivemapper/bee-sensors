@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+message FrameMetadata {
+    string system_time = 1;
+    string utc_time = 2;
+    double uptime_ms = 3;               // steady_clock
+    double latitude = 4;
+    double longitude = 5;
+    double altitude = 6;
+    double speed = 7;
+    double heading = 8;
+    double distance_traveled_m = 9;
+    double frame_delta_m = 10;          // formerly known as dx
+    double eph = 11;
+    double hdop = 12;
+    double vdop = 13;
+    double xdop = 14;
+    double ydop = 15;
+    double tdop = 16;
+    double pdop = 17;
+    double gdop = 18;
+    int32 satellites_used = 19;
+    double cno = 20;
+    double pos_confidence = 21;
+    int32 rf_jam_ind = 22;
+    double acc_x = 23;
+    double acc_y = 24;
+    double acc_z = 25;
+    double gyro_x = 26;
+    double gyro_y = 27;
+    double gyro_z = 28;
+    string metrics = 29;
+}
