@@ -51,9 +51,12 @@ def compute_results():
                     # "bee_2025_02_21_P1007",
                     # "bee_2025_02_21_FebProto01",
                     # "bee_2024_02_24_1P000328",
-                    "bee_2025_06_04_FebProto01"
+                    # "bee_2025_06_04_FebProto01"
+                    "bee_2025_06_09_FebProto01"
                    ]
-    logs, _, _ = parse_database(comparisons)
+    
+    session_name = "de16bc79"
+    logs, _, _ = parse_database(comparisons, session_name)
 
 
     plot_fusion_map(logs,comparisons)
@@ -78,7 +81,7 @@ def recover_sqlite_db(corrupt_db_path, recovered_db_path):
     except subprocess.CalledProcessError as e:
         print("Error during recovery:", e)
 
-def parse_database(date_dirs):
+def parse_database(date_dirs, session_name):
 
     logs = {
             "gnss" : [],
@@ -97,6 +100,8 @@ def parse_database(date_dirs):
             "sensors_imu" : [],
             "fusion_imu" : [],
             "ai_thresholds" : [],
+            "frame_metadata" : [],
+
             }
     metrics = {
             "gnss" : {},
@@ -124,6 +129,12 @@ def parse_database(date_dirs):
         fusion_file = [x for x in os.listdir(os.path.join(DB_DIRECTORY_PATH,date_dir)) if ((x[-3:] == ".db") and (FUSION_DB_NAME in x))][0]
         fusion_path = os.path.join(DB_DIRECTORY_PATH,date_dir,fusion_file)
 
+        odc_db_file = [x for x in os.listdir(os.path.join(DB_DIRECTORY_PATH,date_dir)) if ((x[-3:] == ".db") and (ODC_API_DB_NAME in x))][0]
+        odc_db_path = os.path.join(DB_DIRECTORY_PATH,date_dir,odc_db_file)
+
+        metadata_file = [x for x in sorted(os.listdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..","results"))) if ((x[-4:] == ".csv") and (f"{session_name}_frame_metadata" in x))][-1]
+        metadata_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..","results",metadata_file)
+
         metrics["gnss"][date_dir] = {}
         metrics["nav_pvt"][date_dir] = {}
         metrics["landmarks"][date_dir] = {}
@@ -144,20 +155,20 @@ def parse_database(date_dirs):
         print(fusion_path)
         # add fusion_filtered
         try:
-            df = pd.read_sql_query("SELECT * FROM filtered", conn)
+            df = pd.read_sql_query(f"SELECT * FROM filtered WHERE session = '{session_name}'", conn)
             logs["fusion_filtered"].append(df)
         except Exception as e:
             print(f"fusion_filtered db error: {e}")
             logs["fusion_filtered"].append(None)
         # add filtered
         try:
-            df = pd.read_sql_query("SELECT * FROM gnss", conn)
+            df = pd.read_sql_query(f"SELECT * FROM gnss WHERE session = '{session_name}'", conn)
             logs["fusion_gnss_concise"].append(df)
         except Exception as e:
             print(f"fusion_gnss_concise db error: {e}")
             logs["fusion_gnss_concise"].append(None)
         try:
-            df = pd.read_sql_query("SELECT * FROM imu", conn)
+            df = pd.read_sql_query(f"SELECT * FROM imu WHERE session = '{session_name}'", conn)
             logs["fusion_imu"].append(df)
         except Exception as e:
             print(f"fusion_imu db error: {e}")
@@ -170,7 +181,7 @@ def parse_database(date_dirs):
         conn = sqlite3.connect(sensors_path)
         # add nav_pvt
         try:
-            df = pd.read_sql_query("SELECT * FROM nav_pvt", conn)
+            df = pd.read_sql_query(f"SELECT * FROM nav_pvt WHERE session = '{session_name}'", conn)
             logs["nav_pvt"].append(df)
         except Exception as e:
             print(f"nav_pvt db error: {e}")
@@ -178,18 +189,30 @@ def parse_database(date_dirs):
 
         # add nav_status
         try:
-            df = pd.read_sql_query("SELECT * FROM nav_status", conn)
+            df = pd.read_sql_query(f"SELECT * FROM nav_status WHERE session = '{session_name}'", conn)
             logs["nav_status"].append(df)
         except Exception as e:
             print(f"nav_status db error: {e}")
             logs["nav_status"].append(None)
         # add imu
         try:
-            df = pd.read_sql_query("SELECT * FROM imu", conn)
+            df = pd.read_sql_query(f"SELECT * FROM imu WHERE session = '{session_name}'", conn)
             logs["sensors_imu"].append(df)
         except Exception as e:
             print(f"sensors_imu db error: {e}")
             logs["sensors_imu"].append(None)
+        conn.close()
+
+        # Connect to the database
+        conn = sqlite3.connect(odc_db_path)
+        # add nav_pvt
+        try:
+            df = pd.read_sql_query(f"SELECT * FROM packed_framekms", conn)
+            logs["odc_packed_fmkms"].append(df)
+        except Exception as e:
+            print(f"odc_packed_fmkms db error: {e}")
+            logs["odc_packed_fmkms"].append(None)
+
         conn.close()
 
     thresholds_file = [x for x in os.listdir(os.path.join(DB_DIRECTORY_PATH,date_dir)) if ((x[-4:] == ".csv") and ("ai_thresholds_log" in x))]
@@ -200,6 +223,8 @@ def parse_database(date_dirs):
         logs["ai_thresholds"].append(df)
     else:
         logs["ai_thresholds"].append(None)
+
+    logs["frame_metadata"].append(pd.read_csv(metadata_path))
 
     return logs, metrics, date_dirs
 
@@ -270,12 +295,8 @@ def generate_ellipses(df, type="cov", num_points=100, sigma=3):
 
 
 def plot_fusion_map(logs, comparisons):
-    for ii,logger_drivepath in enumerate(logs["fusion_filtered"]):
+    for ii,logger_drivepath in enumerate(logs["fusion_gnss_concise"]):
         gnss_sessions = []
-        cov_ellipses = []
-        r_ellipses = []
-        q_ellipses = []
-
 
         if logger_drivepath is None or len(logger_drivepath) == 0:
             continue
@@ -293,65 +314,35 @@ def plot_fusion_map(logs, comparisons):
                             }, inplace=True)
                 gnss_sessions.append(temp)
 
-        df_temp = logger_drivepath[logger_drivepath["lat_deg"]!= 0.0]
-        df_temp = logger_drivepath[(logger_drivepath["lat_deg"] >= 37.0) \
-                                 & (logger_drivepath["lat_deg"] <= 37.9) \
-                                 & (logger_drivepath["lon_deg"] >= -122.6) \
-                                 & (logger_drivepath["lon_deg"] <= -121.6)]
-        df_temp = df_temp[["lat_deg","lon_deg","course_deg",
-                           "pos_cov_n_n","pos_cov_n_e","pos_cov_e_e",
-                           "q_cov_n_n","q_cov_n_e","q_cov_e_e",
-                            "r_cov_n_n","r_cov_n_e","r_cov_e_e",
-                           ]]
-        filtered_heading_lats, filtered_heading_lons = get_heading_lines(df_temp["lat_deg"],
-                                                                         df_temp["lon_deg"],
-                                                                         df_temp["course_deg"])
-        print(df_temp.shape)
-        temp = glp.NavData(pandas_df=df_temp)
-        if len(temp) == 0:
-            continue
+        if logs["odc_packed_fmkms"][ii] is not None:
+            df_temp = logs["odc_packed_fmkms"][ii]
+            if len(df_temp) > 0:
+                df_temp = df_temp[["latitude","longitude","heading"]]
+                odc_heading_lats, odc_heading_lons = get_heading_lines(df_temp["latitude"],
+                                                                                         df_temp["longitude"],
+                                                                                         df_temp["heading"],8.)
+                temp = glp.NavData(pandas_df=df_temp)
+                temp.rename({"latitude":"lat_" + f"odc_{comparisons[ii]}" + "_deg",
+                            "longitude":"lon_" + f"odc_{comparisons[ii]}" + "_deg",
+                            }, inplace=True)
+                gnss_sessions.append(temp)
 
-        temp.rename({"lat_deg":f"lat_fusion_{comparisons[ii]}_deg",
-                     "lon_deg":f"lon_fusion_{comparisons[ii]}_deg",
-                    }, inplace=True)
-        gnss_sessions.append(temp)
-        
-        lat_ellipses, lon_ellipses = generate_ellipses(df_temp.iloc[::10], type="cov", sigma=2)
-        cov_ellipses.append([lat_ellipses, lon_ellipses])
-        lat_ellipses, lon_ellipses = generate_ellipses(df_temp.iloc[::10], type="R", sigma=2)
-        r_ellipses.append([lat_ellipses, lon_ellipses])
-        lat_ellipses, lon_ellipses = generate_ellipses(df_temp.iloc[::10], type="Q", sigma=2)
-        q_ellipses.append([lat_ellipses, lon_ellipses])
+        if logs["frame_metadata"][ii] is not None:
+            df_temp = logs["frame_metadata"][ii]
+            if len(df_temp) > 0:
+                df_temp = df_temp[["latitude","longitude","heading"]]
+                cpp_heading_lats, cpp_heading_lons = get_heading_lines(df_temp["latitude"],
+                                                                       df_temp["longitude"],
+                                                                       df_temp["heading"],8.)
+                temp = glp.NavData(pandas_df=df_temp)
+                temp.rename({"latitude":"lat_" + f"cpp_motion_model_{comparisons[ii]}" + "_deg",
+                            "longitude":"lon_" + f"cpp_motion_model_{comparisons[ii]}" + "_deg",
+                            }, inplace=True)
+                gnss_sessions.append(temp)
 
         if len(gnss_sessions) > 0:
             print("FUSION MAP")
             fig = glp.plot_map(*gnss_sessions)
-
-            for jj, (lat_ellipses, lon_ellipses) in enumerate(cov_ellipses):
-                fig.add_trace(go.Scattermapbox(
-                    mode="lines",
-                    lon=lon_ellipses,
-                    lat=lat_ellipses,
-                    line=dict(color=glp.style.STANFORD_COLORS[(jj+len(cov_ellipses)) % 13]), # Use Matplotlib "C0" color
-                    name=f"{comparisons[jj]} 2-sigma EKF Covariance",
-                    ),  
-                )
-                fig.add_trace(go.Scattermapbox(
-                    mode="lines",
-                    lon=r_ellipses[jj][1],
-                    lat=r_ellipses[jj][0],
-                    line=dict(color=glp.style.STANFORD_COLORS[(jj+2*len(cov_ellipses)) % 13]),
-                    name=f"{comparisons[jj]} 2-sigma R Covariance",
-                    ),  
-                )
-                fig.add_trace(go.Scattermapbox(
-                    mode="lines",
-                    lon=q_ellipses[jj][1],
-                    lat=q_ellipses[jj][0],
-                    line=dict(color=glp.style.STANFORD_COLORS[(jj+3*len(cov_ellipses)) % 13]),
-                    name=f"{comparisons[jj]} 2-sigma Q Covariance",
-                    ),  
-                )
 
             fig.add_trace(go.Scattermapbox(
                 lat=gnss_concise_heading_lats,
@@ -360,16 +351,20 @@ def plot_fusion_map(logs, comparisons):
                 # line=dict(width=line_width),
                 name="GNSS concise heading lines"
             ))
-
             fig.add_trace(go.Scattermapbox(
-                lat=filtered_heading_lats,
-                lon=filtered_heading_lons,
+                lat=odc_heading_lats,
+                lon=odc_heading_lons,
                 mode="lines",
                 # line=dict(width=line_width),
-                name="Filtered heading lines"
+                name="ODC framekm heading lines"
             ))
-
-
+            fig.add_trace(go.Scattermapbox(
+                lat=cpp_heading_lats,
+                lon=cpp_heading_lons,
+                mode="lines",
+                # line=dict(width=line_width),
+                name="C++ motion model heading lines"
+            ))
 
             fig.update_layout(
                 autosize=False,
